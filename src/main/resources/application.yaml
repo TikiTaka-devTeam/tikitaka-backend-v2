@@ -2,11 +2,103 @@ spring:
   application:
     name: tikitaka-backend
 
-  profiles:
-    active: ${SPRING_PROFILES_ACTIVE:local}
+  jackson:
+    property-naming-strategy: SNAKE_CASE
+
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 100MB
 
 management:
   endpoints:
     web:
       exposure:
         include: health, info
+
+aws:
+  s3:
+    upload-policies:
+      profile-image:
+        max-file-size: ${PROFILE_IMAGE_MAX_FILE_SIZE:10MB}
+        max-request-size: ${PROFILE_IMAGE_MAX_REQUEST_SIZE:10MB}
+        max-file-count: 1
+        allowed-content-types:
+          - image/jpeg
+          - image/png
+          - image/webp
+      lecture-document:
+        max-file-size: ${LECTURE_DOCUMENT_MAX_FILE_SIZE:10MB}
+        max-request-size: ${LECTURE_DOCUMENT_MAX_REQUEST_SIZE:10MB}
+        max-file-count: 1
+        allowed-content-types:
+          - application/pdf
+      notice-attachment:
+        max-file-size: ${NOTICE_ATTACHMENT_MAX_FILE_SIZE:50MB}
+        max-request-size: ${NOTICE_ATTACHMENT_MAX_REQUEST_SIZE:100MB}
+        max-file-count: ${NOTICE_ATTACHMENT_MAX_FILE_COUNT:10}
+        allowed-content-types:
+          - application/pdf
+          - text/plain
+          - text/csv
+          - application/x-hwp
+          - application/haansofthwp
+          - application/vnd.hancom.hwpx
+          - application/msword
+          - application/vnd.openxmlformats-officedocument.wordprocessingml.document
+          - application/vnd.ms-powerpoint
+          - application/vnd.openxmlformats-officedocument.presentationml.presentation
+          - application/vnd.ms-excel
+          - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+          - image/jpeg
+          - image/png
+          - image/webp
+          - image/gif
+          - application/zip
+          - application/x-zip-compressed
+      assignment-attachment:
+        max-file-size: ${ASSIGNMENT_ATTACHMENT_MAX_FILE_SIZE:50MB}
+        max-request-size: ${ASSIGNMENT_ATTACHMENT_MAX_REQUEST_SIZE:100MB}
+        max-file-count: ${ASSIGNMENT_ATTACHMENT_MAX_FILE_COUNT:10}
+        allowed-content-types:
+          - application/pdf
+          - text/plain
+          - text/csv
+          - application/x-hwp
+          - application/haansofthwp
+          - application/vnd.hancom.hwpx
+          - application/msword
+          - application/vnd.openxmlformats-officedocument.wordprocessingml.document
+          - application/vnd.ms-powerpoint
+          - application/vnd.openxmlformats-officedocument.presentationml.presentation
+          - application/vnd.ms-excel
+          - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+          - image/jpeg
+          - image/png
+          - image/webp
+          - image/gif
+          - application/zip
+          - application/x-zip-compressed
+      assignment-submission:
+        max-file-size: ${ASSIGNMENT_SUBMISSION_MAX_FILE_SIZE:50MB}
+        max-request-size: ${ASSIGNMENT_SUBMISSION_MAX_REQUEST_SIZE:100MB}
+        max-file-count: ${ASSIGNMENT_SUBMISSION_MAX_FILE_COUNT:5}
+        allowed-content-types:
+          - application/pdf
+          - text/plain
+          - text/csv
+          - application/x-hwp
+          - application/haansofthwp
+          - application/vnd.hancom.hwpx
+          - application/msword
+          - application/vnd.openxmlformats-officedocument.wordprocessingml.document
+          - application/vnd.ms-powerpoint
+          - application/vnd.openxmlformats-officedocument.presentationml.presentation
+          - application/vnd.ms-excel
+          - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+          - image/jpeg
+          - image/png
+          - image/webp
+          - image/gif
+          - application/zip
+          - application/x-zip-compressed
