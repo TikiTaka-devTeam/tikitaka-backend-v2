@@ -1,8 +1,11 @@
 spring:
+  config:
+    import: optional:file:.env[.properties]
+
   datasource:
-    url: jdbc:postgresql://localhost:5433/tikitaka
-    username: tikitaka
-    password: "1234"
+    url: ${DB_URL:jdbc:postgresql://localhost:5433/tikitaka}
+    username: ${DB_USERNAME:tikitaka}
+    password: ${DB_PASSWORD:1234}
     driver-class-name: org.postgresql.Driver
 
   jpa:
@@ -15,3 +18,11 @@ spring:
 
   flyway:
     enabled: true
+
+aws:
+  s3:
+    bucket: ${AWS_S3_BUCKET:tikitaka-local}
+    region: ${AWS_REGION:ap-northeast-2}
+    endpoint: ${AWS_S3_ENDPOINT:http://localhost:4566}
+    access-key: ${AWS_ACCESS_KEY_ID:test}
+    secret-key: ${AWS_SECRET_ACCESS_KEY:test}
