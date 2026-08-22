@@ -1,0 +1,227 @@
+name: Discord Notification
+
+on:
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - closed
+
+  workflow_run:
+    workflows:
+      - "DISCORD_WEBHOOK_URL"
+    types:
+      - completed
+
+jobs:
+  # ========================================
+  # PR 생성 알림
+  # ========================================
+  pr-opened:
+    if: >
+      github.event_name == 'pull_request' &&
+      (github.event.action == 'opened' || github.event.action == 'reopened')
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Send PR opened notification
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
+          BASE_BRANCH: ${{ github.event.pull_request.base.ref }}
+
+        run: |
+          PAYLOAD=$(jq -n \
+            --arg title "$PR_TITLE" \
+            --arg url "$PR_URL" \
+            --arg author "$PR_AUTHOR" \
+            --arg head "$HEAD_BRANCH" \
+            --arg base "$BASE_BRANCH" \
+            '{
+              content: "📌 **새로운 PR이 등록되었습니다.**",
+              embeds: [
+                {
+                  title: $title,
+                  url: $url,
+                  fields: [
+                    {
+                      name: "브랜치",
+                      value: ($head + " → " + $base),
+                      inline: false
+                    },
+                    {
+                      name: "작성자",
+                      value: $author,
+                      inline: true
+                    }
+                  ]
+                }
+              ]
+            }')
+
+          curl \
+            -H "Content-Type: application/json" \
+            -X POST \
+            -d "$PAYLOAD" \
+            "$DISCORD_WEBHOOK_URL"
+
+  # ========================================
+  # PR Merge 성공 알림
+  # ========================================
+  merge-success:
+    if: >
+      github.event_name == 'pull_request' &&
+      github.event.action == 'closed' &&
+      github.event.pull_request.merged == true
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Send merge success notification
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
+          BASE_BRANCH: ${{ github.event.pull_request.base.ref }}
+
+        run: |
+          PAYLOAD=$(jq -n \
+            --arg title "$PR_TITLE" \
+            --arg url "$PR_URL" \
+            --arg author "$PR_AUTHOR" \
+            --arg head "$HEAD_BRANCH" \
+            --arg base "$BASE_BRANCH" \
+            '{
+              content: "✅ **PR Merge 성공**",
+              embeds: [
+                {
+                  title: $title,
+                  url: $url,
+                  fields: [
+                    {
+                      name: "브랜치",
+                      value: ($head + " → " + $base),
+                      inline: false
+                    },
+                    {
+                      name: "작성자",
+                      value: $author,
+                      inline: true
+                    }
+                  ]
+                }
+              ]
+            }')
+
+          curl \
+            -H "Content-Type: application/json" \
+            -X POST \
+            -d "$PAYLOAD" \
+            "$DISCORD_WEBHOOK_URL"
+
+  # ========================================
+  # PR Merge 없이 종료
+  # ========================================
+  merge-failed:
+    if: >
+      github.event_name == 'pull_request' &&
+      github.event.action == 'closed' &&
+      github.event.pull_request.merged == false
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Send PR closed notification
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+
+        run: |
+          PAYLOAD=$(jq -n \
+            --arg title "$PR_TITLE" \
+            --arg url "$PR_URL" \
+            '{
+              content: "❌ **PR이 Merge되지 않고 종료되었습니다.**",
+              embeds: [
+                {
+                  title: $title,
+                  url: $url
+                }
+              ]
+            }')
+
+          curl \
+            -H "Content-Type: application/json" \
+            -X POST \
+            -d "$PAYLOAD" \
+            "$DISCORD_WEBHOOK_URL"
+
+  # ========================================
+  # GitHub Actions 성공/실패 알림
+  # ========================================
+  actions-result:
+    if: github.event_name == 'workflow_run'
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Send GitHub Actions result
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          WORKFLOW_NAME: ${{ github.event.workflow_run.name }}
+          WORKFLOW_URL: ${{ github.event.workflow_run.html_url }}
+          CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+          ACTOR: ${{ github.event.workflow_run.actor.login }}
+
+        run: |
+          if [ "$CONCLUSION" = "success" ]; then
+            STATUS="✅ GitHub Actions 성공"
+          elif [ "$CONCLUSION" = "failure" ]; then
+            STATUS="❌ GitHub Actions 실패"
+          elif [ "$CONCLUSION" = "cancelled" ]; then
+            STATUS="⚠️ GitHub Actions 취소"
+          else
+            STATUS="⚠️ GitHub Actions 종료 ($CONCLUSION)"
+          fi
+
+          PAYLOAD=$(jq -n \
+            --arg status "$STATUS" \
+            --arg workflow "$WORKFLOW_NAME" \
+            --arg url "$WORKFLOW_URL" \
+            --arg branch "$BRANCH" \
+            --arg actor "$ACTOR" \
+            '{
+              content: $status,
+              embeds: [
+                {
+                  title: $workflow,
+                  url: $url,
+                  fields: [
+                    {
+                      name: "브랜치",
+                      value: $branch,
+                      inline: true
+                    },
+                    {
+                      name: "실행자",
+                      value: $actor,
+                      inline: true
+                    }
+                  ]
+                }
+              ]
+            }')
+
+          curl \
+            -H "Content-Type: application/json" \
+            -X POST \
+            -d "$PAYLOAD" \
+            "$DISCORD_WEBHOOK_URL"
