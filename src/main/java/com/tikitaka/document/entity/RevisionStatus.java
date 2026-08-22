@@ -1,3 +1,8 @@
-public class RevisionStatus {
-    
+package com.tikitaka.document.entity;
+
+public enum RevisionStatus {
+    EDITING,
+    PROCESSING,
+    COMPLETED,
+    CANCELED
 }
