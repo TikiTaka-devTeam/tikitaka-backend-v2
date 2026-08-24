@@ -26,6 +26,7 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-validation' // 요청 데이터 유효성 검증
 	implementation 'org.springframework.boot:spring-boot-starter-webmvc' // Spring MVC 기반 REST API
 	implementation 'org.springframework.boot:spring-boot-starter-websocket' // WebSocket 실시간 양방향 통신
+	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.3'
 	implementation 'org.flywaydb:flyway-database-postgresql' // PostgreSQL용 Flyway 지원
 	compileOnly 'org.projectlombok:lombok' // 반복적인 Java 코드 자동 생성
 	runtimeOnly 'org.postgresql:postgresql' // PostgreSQL JDBC 드라이버
