@@ -6,12 +6,18 @@ import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
+
+import jakarta.persistence.LockModeType;
 
 import com.tikitaka.auth.entity.Token;
+
 
 public interface TokenRepository extends JpaRepository<Token, UUID> {
 
     Optional<Token> findByRefreshTokenHash(String refreshTokenHash);
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    Optional<Token> findForUpdateByRefreshTokenHash(String refreshTokenHash);
 
     List<Token> findAllByUserId(UUID userId);
 
