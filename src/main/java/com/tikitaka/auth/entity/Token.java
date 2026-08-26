@@ -64,6 +64,10 @@ public class Token extends BaseTimeEntity {
         this.revokedAt = Instant.now();
     }
 
+    public void revoke(Instant revokedAt) {
+        this.revokedAt = revokedAt;
+    }
+
     public boolean isRevoked() {
         return revokedAt != null;
     }

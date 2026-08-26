@@ -5,3 +5,10 @@ spring:
     open-in-view: false
   flyway:
     enabled: true
+security:
+  jwt:
+    issuer: tikitaka
+    secret: dGVzdC1vbmx5LWp3dC1zZWNyZXQta2V5LW11c3QtYmUtYXQtbGVhc3QtMzItYnl0ZXM=
+    access-token-ttl: 15m
+    refresh-token-ttl: 14d
+    refresh-token-pepper: test-only-refresh-token-pepper
