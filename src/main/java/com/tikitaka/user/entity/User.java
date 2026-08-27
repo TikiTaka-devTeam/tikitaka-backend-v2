@@ -39,7 +39,7 @@ public class User extends BaseTimeEntity {
     @Column(name = "account_type", nullable = false, length = 20)
     private AccountType accountType;
 
-    @Column(name = "phone_number", unique = true, length = 20)
+    @Column(name = "phone_number", nullable = false, unique = true, length = 11)
     private String phoneNumber;
 
     @Column(nullable = false, length = 100)
@@ -102,5 +102,9 @@ public class User extends BaseTimeEntity {
                 major,
                 memberIdNumber,
                 profileUrl);
+    }
+
+    public void changePassword(String encodedPassword) {
+        this.password = encodedPassword;
     }
 }

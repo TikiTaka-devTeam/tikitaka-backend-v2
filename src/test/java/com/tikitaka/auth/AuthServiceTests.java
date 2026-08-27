@@ -1,5 +1,8 @@
 package com.tikitaka.auth;
 
+import com.tikitaka.auth.exception.AuthErrorCode;
+import com.tikitaka.auth.service.PhoneVerificationTokenService;
+import com.tikitaka.auth.service.AuthService;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
