@@ -1,4 +1,4 @@
-package com.tikitaka.auth;
+package com.tikitaka.auth.service;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -11,14 +11,24 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.tikitaka.auth.exception.AuthErrorCode;
+import com.tikitaka.auth.service.PhoneVerificationTokenService;
 import com.tikitaka.auth.dto.EmailAvailabilityResponse;
+import com.tikitaka.auth.exception.AuthErrorCode;
 import com.tikitaka.auth.dto.LoginRequest;
+import com.tikitaka.auth.exception.AuthErrorCode;
 import com.tikitaka.auth.dto.LoginResponse;
+import com.tikitaka.auth.exception.AuthErrorCode;
 import com.tikitaka.auth.dto.PhoneAvailabilityResponse;
+import com.tikitaka.auth.exception.AuthErrorCode;
 import com.tikitaka.auth.dto.SignupRequest;
+import com.tikitaka.auth.exception.AuthErrorCode;
 import com.tikitaka.auth.dto.SignupResponse;
+import com.tikitaka.auth.exception.AuthErrorCode;
 import com.tikitaka.auth.dto.TokenResponse;
+import com.tikitaka.auth.exception.AuthErrorCode;
 import com.tikitaka.auth.entity.Token;
+import com.tikitaka.auth.exception.AuthErrorCode;
 import com.tikitaka.auth.repository.TokenRepository;
 import com.tikitaka.global.exception.BusinessException;
 import com.tikitaka.global.s3.FileUploadType;

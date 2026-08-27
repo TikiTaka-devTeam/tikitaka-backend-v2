@@ -16,7 +16,14 @@ management:
       exposure:
         include: health, info
 
+solapi:
+  api-key: ${SOLAPI_API_KEY}
+  api-secret: ${SOLAPI_API_SECRET}
+  sender-number: ${SOLAPI_SENDER_NUMBER}
+
 security:
+  phone-verification:
+    pepper: ${PHONE_VERIFICATION_PEPPER}
   jwt:
     issuer: ${JWT_ISSUER:tikitaka}
     secret: ${JWT_SECRET}
