@@ -170,7 +170,8 @@ public class SpaceService {
 
         List<PendingSpaceResponse> pendingSpaces =
                 !archived
-                        && currentUser.getAccountType() == AccountType.STUDENT
+                        && currentUser.getAccountType()
+                        == AccountType.STUDENT
                         ? getPendingSpaces(currentUser)
                         : List.of();
 
@@ -190,7 +191,7 @@ public class SpaceService {
                         : "ACTIVE";
 
         return spaceMemberRepository
-                .findAllByUserIdAndStatus(
+                .findAllByUserIdAndStatusAndRemovedAtIsNull(
                         currentUser.getId(),
                         SpaceMemberStatus.APPROVED
                 )
@@ -221,7 +222,7 @@ public class SpaceService {
             User currentUser
     ) {
         return spaceMemberRepository
-                .findAllByUserIdAndStatus(
+                .findAllByUserIdAndStatusAndRemovedAtIsNull(
                         currentUser.getId(),
                         SpaceMemberStatus.PENDING
                 )
@@ -297,7 +298,7 @@ public class SpaceService {
         }
 
         spaceMemberRepository
-                .findBySpaceIdAndUserIdAndStatus(
+                .findBySpaceIdAndUserIdAndStatusAndRemovedAtIsNull(
                         space.getId(),
                         currentUser.getId(),
                         SpaceMemberStatus.APPROVED
@@ -309,7 +310,7 @@ public class SpaceService {
                 });
 
         spaceMemberRepository
-                .findBySpaceIdAndUserIdAndStatus(
+                .findBySpaceIdAndUserIdAndStatusAndRemovedAtIsNull(
                         space.getId(),
                         currentUser.getId(),
                         SpaceMemberStatus.PENDING
@@ -367,7 +368,6 @@ public class SpaceService {
                 space
         );
 
-        // 보관 상태에서는 Space 정보 수정 불가
         if (!space.isActiveStatus()) {
             throw new BusinessException(
                     SpaceErrorCode
@@ -524,7 +524,6 @@ public class SpaceService {
                 space
         );
 
-        // 활성 상태의 Space는 바로 삭제할 수 없음 - 보관된상태일때만
         if (space.isActiveStatus()) {
             throw new BusinessException(
                     SpaceErrorCode
@@ -532,7 +531,6 @@ public class SpaceService {
             );
         }
 
-        // ARCHIVED 상태에서만 삭제 가능
         spaceRepository.delete(
                 space
         );
@@ -632,7 +630,7 @@ public class SpaceService {
 
         long currentCount =
                 spaceMemberRepository
-                        .countByUserId(
+                        .countByUserIdAndRemovedAtIsNull(
                                 userId
                         );
 
