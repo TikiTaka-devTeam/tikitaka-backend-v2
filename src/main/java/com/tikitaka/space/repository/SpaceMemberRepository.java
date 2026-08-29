@@ -11,25 +11,15 @@ import com.tikitaka.space.entity.SpaceMemberStatus;
 
 public interface SpaceMemberRepository extends JpaRepository<SpaceMember, UUID> {
 
-    List<SpaceMember> findAllByUserIdAndStatus(
-            UUID userId,
-            SpaceMemberStatus status
-    );
+    List<SpaceMember> findAllByUserIdAndStatus(UUID userId, SpaceMemberStatus status);
 
-    List<SpaceMember> findAllBySpaceIdAndStatus(
-            UUID spaceId,
-            SpaceMemberStatus status
-    );
+    List<SpaceMember> findAllBySpaceIdAndStatus(UUID spaceId, SpaceMemberStatus status);
 
     Optional<SpaceMember> findBySpaceIdAndUserIdAndStatus(
-            UUID spaceId,
-            UUID userId,
-            SpaceMemberStatus status
-    );
+            UUID spaceId, UUID userId, SpaceMemberStatus status);
 
     boolean existsBySpaceIdAndUserIdAndStatusIn(
-            UUID spaceId,
-            UUID userId,
-            List<SpaceMemberStatus> statuses
-    );
+            UUID spaceId, UUID userId, List<SpaceMemberStatus> statuses);
+
+    long countByUserId(UUID userId);
 }

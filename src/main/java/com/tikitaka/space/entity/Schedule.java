@@ -43,4 +43,15 @@ public class Schedule extends BaseTimeEntity {
 
     @Column(name = "end_time", nullable = false)
     private LocalTime endTime;
+
+    private Schedule(Space space, DayOfWeek day, LocalTime startTime, LocalTime endTime) {
+        this.space = space;
+        this.day = day;
+        this.startTime = startTime;
+        this.endTime = endTime;
+    }
+
+    public static Schedule create(Space space, DayOfWeek day, LocalTime startTime, LocalTime endTime) {
+        return new Schedule(space, day, startTime, endTime);
+    }
 }
