@@ -278,7 +278,9 @@ public class SpaceService {
             User currentUser,
             SpaceJoinRequest request
     ) {
-        requireStudentAccount(currentUser);
+        requireStudentAccount(
+                currentUser
+        );
 
         Space space =
                 spaceRepository
@@ -298,6 +300,7 @@ public class SpaceService {
             );
         }
 
+        // 현재 승인된 멤버인지 확인
         spaceMemberRepository
                 .findBySpaceIdAndUserIdAndStatusAndRemovedAtIsNull(
                         space.getId(),
@@ -310,6 +313,7 @@ public class SpaceService {
                     );
                 });
 
+        // 현재 가입 승인 대기 중인지 확인
         spaceMemberRepository
                 .findBySpaceIdAndUserIdAndStatusAndRemovedAtIsNull(
                         space.getId(),
@@ -331,14 +335,36 @@ public class SpaceService {
                         currentUser.getId()
                 );
 
+        /*
+         * 과거에 내보내진 멤버가 있으면
+         * 새 row를 만들지 않고 기존 row를 다시 활성화한다.
+         */
         SpaceMember member =
-                SpaceMember.student(
-                        space,
-                        currentUser,
-                        colorKey,
-                        space.isAutoApprove(),
-                        now
-                );
+                spaceMemberRepository
+                        .findFirstBySpaceIdAndUserIdAndRemovedAtIsNotNullOrderByRemovedAtDesc(
+                                space.getId(),
+                                currentUser.getId()
+                        )
+                        .map(removedMember -> {
+
+                            removedMember.rejoin(
+                                    colorKey,
+                                    space.isAutoApprove(),
+                                    now
+                            );
+
+                            return removedMember;
+                        })
+                        .orElseGet(() ->
+
+                                SpaceMember.student(
+                                        space,
+                                        currentUser,
+                                        colorKey,
+                                        space.isAutoApprove(),
+                                        now
+                                )
+                        );
 
         spaceMemberRepository.save(
                 member
@@ -362,7 +388,9 @@ public class SpaceService {
             SpaceUpdateRequest request
     ) {
         Space space =
-                getSpace(spaceId);
+                getSpace(
+                        spaceId
+                );
 
         requireSpaceProfessor(
                 currentUser,
@@ -462,7 +490,9 @@ public class SpaceService {
             UUID spaceId
     ) {
         Space space =
-                getSpace(spaceId);
+                getSpace(
+                        spaceId
+                );
 
         requireSpaceProfessor(
                 currentUser,
@@ -491,7 +521,9 @@ public class SpaceService {
             UUID spaceId
     ) {
         Space space =
-                getSpace(spaceId);
+                getSpace(
+                        spaceId
+                );
 
         requireSpaceProfessor(
                 currentUser,
@@ -518,7 +550,9 @@ public class SpaceService {
             UUID spaceId
     ) {
         Space space =
-                getSpace(spaceId);
+                getSpace(
+                        spaceId
+                );
 
         requireSpaceProfessor(
                 currentUser,
