@@ -28,6 +28,7 @@ import com.tikitaka.space.entity.Schedule;
 import com.tikitaka.space.entity.Space;
 import com.tikitaka.space.entity.SpaceColorKey;
 import com.tikitaka.space.entity.SpaceMember;
+import com.tikitaka.space.entity.SpaceMemberRole;
 import com.tikitaka.space.entity.SpaceMemberStatus;
 import com.tikitaka.space.exception.SpaceErrorCode;
 import com.tikitaka.space.repository.ScheduleRepository;
@@ -612,12 +613,19 @@ public class SpaceService {
         Space space =
                 member.getSpace();
 
+        String spaceCode =
+                member.getRole()
+                        == SpaceMemberRole.PROFESSOR
+                        ? space.getSpaceCode()
+                        : null;
+
         return new SpaceListResponse(
                 space.getId(),
                 space.getSpaceName(),
                 space.getYear(),
                 space.getSemester(),
                 member.getColorKey(),
+                spaceCode,
                 status
         );
     }
