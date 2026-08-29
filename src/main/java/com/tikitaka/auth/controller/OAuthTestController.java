@@ -18,6 +18,7 @@ import com.tikitaka.auth.service.OAuthService;
 import com.tikitaka.global.exception.BusinessException;
 import io.jsonwebtoken.JwtException;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Hidden;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
 @RestController
@@ -60,6 +61,7 @@ public class OAuthTestController {
     }
 
     @GetMapping("/{provider}/callback")
+    @Hidden
     @Operation(summary = "OAuth 테스트 콜백", description = "Google/Kakao가 호출하는 테스트용 콜백입니다. 직접 호출하지 않습니다.")
     public OAuthLoginResponse callback(@PathVariable String provider, @RequestParam String code,
             @RequestParam String state) {

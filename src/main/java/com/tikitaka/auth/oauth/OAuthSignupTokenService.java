@@ -33,12 +33,13 @@ public class OAuthSignupTokenService {
 
     public String issue(OAuthProfile profile) {
         Instant now = clock.instant();
-        return Jwts.builder().issuer(jwtProperties.issuer()).subject(profile.providerUserId())
+        var builder = Jwts.builder().issuer(jwtProperties.issuer()).subject(profile.providerUserId())
                 .id(UUID.randomUUID().toString()).claim("token_type", TOKEN_TYPE)
-                .claim("provider", profile.provider().name()).claim("email", profile.email())
-                .claim("name", profile.name()).claim("profile_url", profile.profileUrl())
-                .issuedAt(Date.from(now)).expiration(Date.from(now.plus(ttl)))
-                .signWith(signingKey).compact();
+                .claim("provider", profile.provider().name()).claim("name", profile.name())
+                .issuedAt(Date.from(now)).expiration(Date.from(now.plus(ttl)));
+        if (profile.email() != null) builder.claim("email", profile.email());
+        if (profile.profileUrl() != null) builder.claim("profile_url", profile.profileUrl());
+        return builder.signWith(signingKey).compact();
     }
 
     public OAuthSignupClaims validate(String token) {

@@ -53,7 +53,14 @@ public class RestOAuthProviderClient implements OAuthProviderClient {
         Map<String, Object> kakaoProfile = account == null ? null : (Map<String, Object>) account.get("profile");
         return profile(AuthProvider.KAKAO, body.get("id"), account == null ? null : account.get("email"),
                 kakaoProfile == null ? null : kakaoProfile.get("nickname"),
-                kakaoProfile == null ? null : kakaoProfile.get("profile_image_url"));
+                kakaoProfileImage(kakaoProfile));
+    }
+
+    static Object kakaoProfileImage(Map<String, Object> kakaoProfile) {
+        if (kakaoProfile == null || Boolean.TRUE.equals(kakaoProfile.get("is_default_image"))) {
+            return null;
+        }
+        return kakaoProfile.get("profile_image_url");
     }
 
     private Map<String, Object> token(String uri, String code, OAuthProperties.Provider config,
@@ -86,11 +93,11 @@ public class RestOAuthProviderClient implements OAuthProviderClient {
     }
 
     private OAuthProfile profile(AuthProvider provider, Object id, Object email, Object name, Object image) {
-        if (id == null || email == null || name == null) {
+        if (id == null || name == null || name.toString().isBlank()) {
             throw new BusinessException(OAuthErrorCode.PROFILE_INCOMPLETE);
         }
-        return new OAuthProfile(provider, id.toString(), email.toString(), name.toString(),
-                image == null ? null : image.toString());
+        return new OAuthProfile(provider, id.toString(), email == null ? null : email.toString(),
+                name.toString(), image == null ? null : image.toString());
     }
 
     private OAuthProperties.Provider requireConfig(OAuthProperties.Provider config) {

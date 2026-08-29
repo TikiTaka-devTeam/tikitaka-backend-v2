@@ -1,8 +1,10 @@
 package com.tikitaka.auth.service;
 
 import java.util.Locale;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 import com.tikitaka.auth.dto.OAuthLoginResponse;
 import com.tikitaka.auth.dto.OAuthProfileResponse;
 import com.tikitaka.auth.dto.OAuthSignupRequest;
@@ -19,6 +21,8 @@ import com.tikitaka.auth.oauth.OAuthSignupTokenService;
 import com.tikitaka.auth.repository.AuthRepository;
 import com.tikitaka.auth.repository.TokenRepository;
 import com.tikitaka.global.exception.BusinessException;
+import com.tikitaka.global.s3.FileUploadType;
+import com.tikitaka.global.s3.S3Service;
 import com.tikitaka.global.security.JwtProvider;
 import com.tikitaka.global.security.RefreshTokenHasher;
 import com.tikitaka.global.security.TokenPair;
@@ -38,11 +42,12 @@ public class OAuthService {
     private final PhoneVerificationConsumer phoneVerificationConsumer;
     private final JwtProvider jwtProvider;
     private final RefreshTokenHasher refreshTokenHasher;
+    private final ObjectProvider<S3Service> s3ServiceProvider;
 
     public OAuthService(OAuthProviderClient providerClient, OAuthSignupTokenService signupTokens,
             AuthRepository authRepository, UserRepository userRepository, TokenRepository tokenRepository,
             PhoneVerificationConsumer phoneVerificationConsumer, JwtProvider jwtProvider,
-            RefreshTokenHasher refreshTokenHasher) {
+            RefreshTokenHasher refreshTokenHasher, ObjectProvider<S3Service> s3ServiceProvider) {
         this.providerClient = providerClient;
         this.signupTokens = signupTokens;
         this.authRepository = authRepository;
@@ -51,6 +56,7 @@ public class OAuthService {
         this.phoneVerificationConsumer = phoneVerificationConsumer;
         this.jwtProvider = jwtProvider;
         this.refreshTokenHasher = refreshTokenHasher;
+        this.s3ServiceProvider = s3ServiceProvider;
     }
 
     @Transactional
@@ -62,13 +68,14 @@ public class OAuthService {
                     ensureActive(user);
                     return OAuthLoginResponse.login(issueTokens(user), user);
                 }).orElseGet(() -> OAuthLoginResponse.signup(signupTokens.issue(profile),
-                        new OAuthProfileResponse(normalizeEmail(profile.email()), profile.name(), profile.profileUrl())));
+                        new OAuthProfileResponse(normalizeNullableEmail(profile.email()), profile.name().trim(), profile.profileUrl())));
     }
 
     @Transactional
-    public OAuthSignupResponse signup(OAuthSignupRequest request) {
+    public OAuthSignupResponse signup(OAuthSignupRequest request, MultipartFile profileImage) {
         OAuthSignupClaims claims = validateSignupToken(request.signupToken());
-        String email = normalizeEmail(claims.email());
+        String email = normalizeEmail(request.email());
+        String name = request.name().trim();
         String phone = request.phoneNumber().replace("-", "").trim();
         if (authRepository.existsByProviderAndProviderUserId(claims.provider(), claims.providerUserId())) {
             throw new BusinessException(OAuthErrorCode.ACCOUNT_ALREADY_REGISTERED);
@@ -80,11 +87,21 @@ public class OAuthService {
             throw new BusinessException(AuthErrorCode.PHONE_NUMBER_ALREADY_REGISTERED);
         }
         phoneVerificationConsumer.consume(request.phoneVerificationToken(), phone);
-        User user = userRepository.save(User.createLocal(email, null, claims.name().trim(), request.accountType(),
+        String profileUrl = resolveProfileUrl(profileImage, claims.profileUrl());
+        User user = userRepository.save(User.createLocal(email, null, name, request.accountType(),
                 phone, request.univ().trim(), request.major().trim(), request.memberIdNumber().trim(),
-                claims.profileUrl()));
+                profileUrl));
         authRepository.save(Auth.create(user, claims.provider(), claims.providerUserId()));
         return OAuthSignupResponse.of(issueTokens(user), user);
+    }
+
+    private String resolveProfileUrl(MultipartFile profileImage, String oauthProfileUrl) {
+        if (profileImage == null) return oauthProfileUrl;
+        S3Service s3Service = s3ServiceProvider.getIfAvailable();
+        if (s3Service == null) {
+            throw new BusinessException(AuthErrorCode.PROFILE_UPLOAD_UNAVAILABLE);
+        }
+        return s3Service.upload(profileImage, "profiles", FileUploadType.PROFILE_IMAGE).url();
     }
 
     private TokenPair issueTokens(User user) {
@@ -97,7 +114,7 @@ public class OAuthService {
     private OAuthSignupClaims validateSignupToken(String token) {
         try {
             OAuthSignupClaims claims = signupTokens.validate(token);
-            if (claims.providerUserId() == null || claims.email() == null || claims.name() == null) {
+            if (claims.providerUserId() == null || claims.name() == null || claims.name().isBlank()) {
                 throw new BusinessException(OAuthErrorCode.SIGNUP_TOKEN_INVALID);
             }
             return claims;
@@ -122,5 +139,9 @@ public class OAuthService {
 
     private String normalizeEmail(String email) {
         return email.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private String normalizeNullableEmail(String email) {
+        return email == null ? null : normalizeEmail(email);
     }
 }

@@ -1,10 +1,13 @@
 package com.tikitaka.auth.controller;
 
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 import com.tikitaka.auth.dto.OAuthAuthorizationRequest;
 import com.tikitaka.auth.dto.OAuthLoginResponse;
 import com.tikitaka.auth.dto.OAuthSignupRequest;
@@ -36,12 +39,14 @@ public class OAuthController {
         return oauthService.authorize(provider, request.authorizationCode());
     }
 
-    @PostMapping("/signup")
+    @PostMapping(value = "/signup", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(summary = "USR-002 소셜 회원가입")
     @ApiResponses({@ApiResponse(responseCode = "200", description = "회원가입 및 로그인 성공"),
             @ApiResponse(responseCode = "400", description = "입력값 또는 휴대폰 인증 오류"),
             @ApiResponse(responseCode = "409", description = "이메일, 휴대폰 또는 OAuth 계정 중복")})
-    public OAuthSignupResponse signup(@RequestBody @Valid OAuthSignupRequest request) {
-        return oauthService.signup(request);
+    public OAuthSignupResponse signup(
+            @RequestPart("signup_data") @Valid OAuthSignupRequest request,
+            @RequestPart(value = "profile_image", required = false) MultipartFile profileImage) {
+        return oauthService.signup(request, profileImage);
     }
 }
