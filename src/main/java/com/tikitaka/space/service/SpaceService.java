@@ -524,7 +524,7 @@ public class SpaceService {
                 space
         );
 
-        // 활성 상태의 Space는 바로 삭제할 수 없음
+        // 활성 상태의 Space는 바로 삭제할 수 없음 - 보관된상태일때만
         if (space.isActiveStatus()) {
             throw new BusinessException(
                     SpaceErrorCode
