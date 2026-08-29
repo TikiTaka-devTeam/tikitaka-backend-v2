@@ -1,6 +1,5 @@
 package com.tikitaka.assignment.controller;
 
-import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 
@@ -24,6 +23,7 @@ import com.tikitaka.global.security.CurrentUserResolver;
 import com.tikitaka.user.entity.User;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Encoding;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -39,9 +39,7 @@ public class AssignmentController {
     private final AssignmentService assignmentService;
     private final CurrentUserResolver currentUserResolver;
 
-    @Operation(
-            summary = "ASG-001 과제 목록 조회"
-    )
+    @Operation(summary = "ASG-001 과제 목록 조회")
     @GetMapping("/api/v1/spaces/{spaceId}/assignments")
     public AssignmentListResponse getAssignments(
             @PathVariable UUID spaceId,
@@ -56,9 +54,7 @@ public class AssignmentController {
         );
     }
 
-    @Operation(
-            summary = "ASG-002 과제 현황 요약 조회"
-    )
+    @Operation(summary = "ASG-002 과제 현황 요약 조회")
     @GetMapping("/api/v1/spaces/{spaceId}/assignments/summary")
     public AssignmentSummaryResponse getAssignmentSummary(
             @PathVariable UUID spaceId,
@@ -73,9 +69,7 @@ public class AssignmentController {
         );
     }
 
-    @Operation(
-            summary = "ASG-003 과제 상세 조회"
-    )
+    @Operation(summary = "ASG-003 과제 상세 조회")
     @GetMapping("/api/v1/assignments/{assignmentId}")
     public AssignmentDetailResponse getAssignment(
             @PathVariable UUID assignmentId,
@@ -92,15 +86,6 @@ public class AssignmentController {
 
     @Operation(
             summary = "ASG-004 과제 등록",
-            description = """
-                    과제 정보와 첨부파일을 multipart/form-data로 전송합니다.
-
-                    assignment_data:
-                    Content-Type = application/json
-
-                    files:
-                    첨부파일, 선택사항
-                    """,
             requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(
                     content = @Content(
                             mediaType = MediaType.MULTIPART_FORM_DATA_VALUE,
@@ -124,30 +109,31 @@ public class AssignmentController {
             @RequestPart("assignment_data")
             AssignmentCreateRequest assignmentData,
 
+            @Parameter(
+                    description = "과제 첨부파일",
+                    content = @Content(
+                            mediaType = MediaType.APPLICATION_OCTET_STREAM_VALUE,
+                            schema = @Schema(
+                                    type = "string",
+                                    format = "binary"
+                            )
+                    )
+            )
             @RequestPart(
                     value = "files",
                     required = false
             )
-            @Schema(
-                    type = "array",
-                    format = "binary"
-            )
-            MultipartFile[] files,
+            List<MultipartFile> files,
 
             Authentication authentication
     ) {
         User currentUser =
                 currentUserResolver.resolve(authentication);
 
-        List<MultipartFile> fileList =
-                files == null
-                        ? List.of()
-                        : Arrays.asList(files);
-
         return assignmentService.createAssignment(
                 spaceId,
                 assignmentData,
-                fileList,
+                files,
                 currentUser
         );
     }
