@@ -66,6 +66,12 @@ public enum SpaceErrorCode implements ErrorCode {
             "보관된 Space는 수정할 수 없습니다."
     ),
 
+    ACTIVE_SPACE_CANNOT_BE_DELETED(
+            HttpStatus.CONFLICT,
+            "SPACE_ACTIVE_CANNOT_DELETE",
+            "활성 상태의 Space는 삭제할 수 없습니다. 먼저 Space를 보관해주세요."
+    ),
+
     INVALID_SCHEDULE(
             HttpStatus.BAD_REQUEST,
             "SPACE_INVALID_SCHEDULE",

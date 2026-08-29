@@ -170,8 +170,7 @@ public class SpaceService {
 
         List<PendingSpaceResponse> pendingSpaces =
                 !archived
-                        && currentUser.getAccountType()
-                        == AccountType.STUDENT
+                        && currentUser.getAccountType() == AccountType.STUDENT
                         ? getPendingSpaces(currentUser)
                         : List.of();
 
@@ -198,8 +197,7 @@ public class SpaceService {
                 .stream()
                 .filter(member ->
                         member.getSpace()
-                                .isActiveStatus()
-                                != archived
+                                .isActiveStatus() != archived
                 )
                 .sorted(
                         Comparator
@@ -288,8 +286,7 @@ public class SpaceService {
                         )
                         .orElseThrow(() ->
                                 new BusinessException(
-                                        SpaceErrorCode
-                                                .SPACE_CODE_NOT_FOUND
+                                        SpaceErrorCode.SPACE_CODE_NOT_FOUND
                                 )
                         );
 
@@ -370,7 +367,7 @@ public class SpaceService {
                 space
         );
 
-        // 보관된 Space는 수정 불가
+        // 보관 상태에서는 Space 정보 수정 불가
         if (!space.isActiveStatus()) {
             throw new BusinessException(
                     SpaceErrorCode
@@ -411,10 +408,9 @@ public class SpaceService {
 
         if (request.schedules() != null) {
 
-            scheduleRepository
-                    .deleteAllBySpaceId(
-                            spaceId
-                    );
+            scheduleRepository.deleteAllBySpaceId(
+                    spaceId
+            );
 
             scheduleRepository.flush();
 
@@ -528,6 +524,15 @@ public class SpaceService {
                 space
         );
 
+        // 활성 상태의 Space는 바로 삭제할 수 없음
+        if (space.isActiveStatus()) {
+            throw new BusinessException(
+                    SpaceErrorCode
+                            .ACTIVE_SPACE_CANNOT_BE_DELETED
+            );
+        }
+
+        // ARCHIVED 상태에서만 삭제 가능
         spaceRepository.delete(
                 space
         );
