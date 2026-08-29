@@ -19,6 +19,7 @@ import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.Operation;
 import io.swagger.v3.oas.models.PathItem;
 import io.swagger.v3.oas.models.Paths;
+import io.swagger.v3.oas.models.media.Encoding;
 import io.swagger.v3.oas.models.info.Info;
 import io.swagger.v3.oas.models.security.SecurityScheme;
 
@@ -83,6 +84,27 @@ public class OpenApiConfig {
 
     private boolean isUserAuthApi(Operation operation) {
         return operation.getTags() != null && operation.getTags().contains(USER_AUTH_TAG);
+    }
+
+    @Bean
+    OpenApiCustomizer signupMultipartEncodingCustomizer() {
+        return openApi -> {
+            setSignupDataJsonEncoding(openApi, "/api/v1/auth/signup");
+            setSignupDataJsonEncoding(openApi, "/api/v1/auth/oauth/signup");
+        };
+    }
+
+    private void setSignupDataJsonEncoding(OpenAPI openApi, String path) {
+        if (openApi.getPaths() == null || openApi.getPaths().get(path) == null
+                || openApi.getPaths().get(path).getPost() == null
+                || openApi.getPaths().get(path).getPost().getRequestBody() == null) {
+            return;
+        }
+        io.swagger.v3.oas.models.media.MediaType multipart = openApi.getPaths().get(path).getPost()
+                .getRequestBody().getContent().get("multipart/form-data");
+        if (multipart != null) {
+            multipart.addEncoding("signup_data", new Encoding().contentType("application/json"));
+        }
     }
 
     @Bean
