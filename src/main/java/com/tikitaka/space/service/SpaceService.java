@@ -147,16 +147,6 @@ public class SpaceService {
         );
     }
 
-    /*
-     * SPC-002 / SPC-003
-     *
-     * ACTIVE
-     * 교수 -> APPROVED 활성 Space
-     * 학생 -> APPROVED 활성 Space + PENDING 활성 Space
-     *
-     * ARCHIVED
-     * 교수/학생 -> APPROVED 보관 Space
-     */
     public SpaceQueryResponse getSpaces(
             User currentUser,
             String status
@@ -178,17 +168,11 @@ public class SpaceService {
                         archived
                 );
 
-        /*
-         * 승인 대기는 학생이 ACTIVE 목록을 조회할 때만
-         * 함께 내려준다.
-         */
         List<PendingSpaceResponse> pendingSpaces =
                 !archived
                         && currentUser.getAccountType()
                         == AccountType.STUDENT
-
                         ? getPendingSpaces(currentUser)
-
                         : List.of();
 
         return new SpaceQueryResponse(
@@ -197,9 +181,6 @@ public class SpaceService {
         );
     }
 
-    /*
-     * APPROVED 상태의 Space 조회
-     */
     private List<SpaceListResponse> getApprovedSpaces(
             User currentUser,
             boolean archived
@@ -215,17 +196,11 @@ public class SpaceService {
                         SpaceMemberStatus.APPROVED
                 )
                 .stream()
-
-                /*
-                 * archived=false -> ACTIVE만
-                 * archived=true  -> ARCHIVED만
-                 */
                 .filter(member ->
                         member.getSpace()
                                 .isActiveStatus()
                                 != archived
                 )
-
                 .sorted(
                         Comparator
                                 .comparing(
@@ -235,20 +210,15 @@ public class SpaceService {
                                 )
                                 .reversed()
                 )
-
                 .map(member ->
                         toSpaceListResponse(
                                 member,
                                 responseStatus
                         )
                 )
-
                 .toList();
     }
 
-    /*
-     * 학생의 활성 승인 대기 Space 조회
-     */
     private List<PendingSpaceResponse> getPendingSpaces(
             User currentUser
     ) {
@@ -258,17 +228,10 @@ public class SpaceService {
                         SpaceMemberStatus.PENDING
                 )
                 .stream()
-
-                /*
-                 * PENDING 상태였더라도
-                 * Space 자체가 ARCHIVED 됐다면
-                 * ACTIVE 목록에는 내려주지 않는다.
-                 */
                 .filter(member ->
                         member.getSpace()
                                 .isActiveStatus()
                 )
-
                 .sorted(
                         Comparator
                                 .comparing(
@@ -276,7 +239,6 @@ public class SpaceService {
                                 )
                                 .reversed()
                 )
-
                 .map(member -> {
 
                     Space space =
@@ -308,7 +270,6 @@ public class SpaceService {
                             member.getRequestedAt()
                     );
                 })
-
                 .toList();
     }
 
@@ -408,6 +369,14 @@ public class SpaceService {
                 currentUser,
                 space
         );
+
+        // 보관된 Space는 수정 불가
+        if (!space.isActiveStatus()) {
+            throw new BusinessException(
+                    SpaceErrorCode
+                            .ARCHIVED_SPACE_CANNOT_BE_MODIFIED
+            );
+        }
 
         if (request.schedules() != null) {
             validateSchedules(
@@ -619,8 +588,7 @@ public class SpaceService {
     private void validateSchedules(
             List<ScheduleRequest> schedules
     ) {
-        for (ScheduleRequest schedule
-                : schedules) {
+        for (ScheduleRequest schedule : schedules) {
 
             if (!schedule.startTime()
                     .isBefore(
@@ -713,12 +681,6 @@ public class SpaceService {
         );
     }
 
-    /*
-     * 교수는 언제든 Space 생성 가능
-     *
-     * 1~6월  -> 1학기
-     * 7~12월 -> 2학기
-     */
     private String resolveSemester(
             ZonedDateTime now
     ) {

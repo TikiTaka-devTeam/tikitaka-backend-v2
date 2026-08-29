@@ -60,6 +60,12 @@ public enum SpaceErrorCode implements ErrorCode {
             "이미 활성 상태인 Space입니다."
     ),
 
+    ARCHIVED_SPACE_CANNOT_BE_MODIFIED(
+            HttpStatus.CONFLICT,
+            "SPACE_ARCHIVED_CANNOT_MODIFY",
+            "보관된 Space는 수정할 수 없습니다."
+    ),
+
     INVALID_SCHEDULE(
             HttpStatus.BAD_REQUEST,
             "SPACE_INVALID_SCHEDULE",
