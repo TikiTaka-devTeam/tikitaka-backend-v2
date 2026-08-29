@@ -6,6 +6,8 @@ spring:
   flyway:
     enabled: true
 security:
+  phone-verification:
+    pepper: test-only-phone-verification-pepper
   jwt:
     issuer: tikitaka
     secret: dGVzdC1vbmx5LWp3dC1zZWNyZXQta2V5LW11c3QtYmUtYXQtbGVhc3QtMzItYnl0ZXM=

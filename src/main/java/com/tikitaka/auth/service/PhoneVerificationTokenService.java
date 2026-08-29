@@ -1,4 +1,4 @@
-package com.tikitaka.auth;
+package com.tikitaka.auth.service;
 
 import java.time.Clock;
 import java.time.Duration;

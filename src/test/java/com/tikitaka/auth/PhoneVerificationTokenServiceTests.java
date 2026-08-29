@@ -1,5 +1,6 @@
 package com.tikitaka.auth;
 
+import com.tikitaka.auth.service.PhoneVerificationTokenService;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
