@@ -1,13 +1,20 @@
 package com.tikitaka.user;
 
+import org.springframework.http.MediaType;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 import com.tikitaka.auth.dto.MessageResponse;
 import com.tikitaka.global.security.AuthenticatedUser;
+import com.tikitaka.user.dto.ProfileImageResponse;
 import com.tikitaka.user.dto.PasswordChangeRequest;
+import com.tikitaka.user.dto.UserProfileResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -23,6 +30,25 @@ public class UserController {
 
     public UserController(UserService userService) {
         this.userService = userService;
+    }
+
+    @GetMapping("/me")
+    @Operation(summary = "USR-012 내 회원정보 조회", description = "로그인 사용자의 회원정보를 조회합니다.")
+    public UserProfileResponse getMyProfile(
+            @Parameter(hidden = true) @AuthenticationPrincipal AuthenticatedUser authenticatedUser
+    ) {
+        return userService.getMyProfile(authenticatedUser.userId());
+    }
+
+    @PatchMapping(value = "/me/profile-image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "USR-013 내 프로필 사진 등록·교체·삭제",
+            description = "profile_image를 전달하면 등록 또는 교체하고, delete=true를 전달하면 삭제합니다. 두 요청은 동시에 전달할 수 없습니다.")
+    public ProfileImageResponse updateProfileImage(
+            @Parameter(hidden = true) @AuthenticationPrincipal AuthenticatedUser authenticatedUser,
+            @RequestPart(value = "profile_image", required = false) MultipartFile profileImage,
+            @RequestParam(value = "delete", defaultValue = "false") boolean delete
+    ) {
+        return userService.updateProfileImage(authenticatedUser.userId(), profileImage, delete);
     }
 
     @PatchMapping("/me/password")
