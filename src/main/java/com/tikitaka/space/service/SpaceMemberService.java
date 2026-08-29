@@ -20,7 +20,9 @@ import com.tikitaka.space.repository.SpaceMemberPermissionRepository;
 import com.tikitaka.space.repository.SpaceMemberRepository;
 import com.tikitaka.space.repository.SpaceRepository;
 import com.tikitaka.user.entity.User;
+
 import lombok.RequiredArgsConstructor;
+
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -109,7 +111,8 @@ public class SpaceMemberService {
             );
         }
 
-        User user = target.getUser();
+        User user =
+                target.getUser();
 
         return new MemberDetailResponse(
                 target.getId(),
@@ -182,7 +185,8 @@ public class SpaceMemberService {
                         request.joinRequestIds()
                 );
 
-        Instant now = Instant.now();
+        Instant now =
+                Instant.now();
 
         targets.forEach(
                 member ->
@@ -211,7 +215,8 @@ public class SpaceMemberService {
                         request.joinRequestIds()
                 );
 
-        Instant now = Instant.now();
+        Instant now =
+                Instant.now();
 
         targets.forEach(
                 member ->
@@ -241,9 +246,31 @@ public class SpaceMemberService {
             );
         }
 
+        boolean autoApprove =
+                request.autoApprove();
+
         space.updateAutoApprove(
-                request.autoApprove()
+                autoApprove
         );
+
+        // 자동승인을 켜는 순간 기존 승인 대기 학생들도 모두 승인
+        if (autoApprove) {
+
+            List<SpaceMember> pendingMembers =
+                    spaceMemberRepository
+                            .findAllBySpaceIdAndStatusAndRemovedAtIsNull(
+                                    spaceId,
+                                    SpaceMemberStatus.PENDING
+                            );
+
+            Instant now =
+                    Instant.now();
+
+            pendingMembers.forEach(
+                    member ->
+                            member.approve(now)
+            );
+        }
 
         return new JoinSettingsResponse(
                 space.getId(),
