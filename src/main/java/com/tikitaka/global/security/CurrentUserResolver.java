@@ -1,16 +1,12 @@
 package com.tikitaka.global.security;
 
-import java.util.UUID;
-
-import org.springframework.security.core.Authentication;
-import org.springframework.stereotype.Component;
-
 import com.tikitaka.global.exception.BusinessException;
-import com.tikitaka.space.exception.SpaceErrorCode;
+import com.tikitaka.global.exception.CommonErrorCode;
 import com.tikitaka.user.entity.User;
 import com.tikitaka.user.repository.UserRepository;
-
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.Authentication;
+import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
@@ -20,21 +16,18 @@ public class CurrentUserResolver {
 
     public User resolve(Authentication authentication) {
         if (authentication == null || !authentication.isAuthenticated()) {
-            throw new BusinessException(SpaceErrorCode.UNAUTHENTICATED);
+            throw new BusinessException(CommonErrorCode.UNAUTHORIZED);
         }
 
-        String principalName = authentication.getName();
-        if (principalName == null || principalName.isBlank()) {
-            throw new BusinessException(SpaceErrorCode.UNAUTHENTICATED);
+        Object principal = authentication.getPrincipal();
+
+        if (!(principal instanceof AuthenticatedUser authenticatedUser)) {
+            throw new BusinessException(CommonErrorCode.UNAUTHORIZED);
         }
 
-        try {
-            UUID userId = UUID.fromString(principalName);
-            return userRepository.findById(userId)
-                    .orElseThrow(() -> new BusinessException(SpaceErrorCode.USER_NOT_FOUND));
-        } catch (IllegalArgumentException ignored) {
-            return userRepository.findByEmail(principalName)
-                    .orElseThrow(() -> new BusinessException(SpaceErrorCode.USER_NOT_FOUND));
-        }
+        return userRepository.findById(authenticatedUser.userId())
+                .orElseThrow(() ->
+                        new BusinessException(CommonErrorCode.UNAUTHORIZED)
+                );
     }
 }
