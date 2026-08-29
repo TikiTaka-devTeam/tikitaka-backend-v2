@@ -65,4 +65,27 @@ public class SpaceMember extends BaseTimeEntity {
 
     @Column(name = "last_accessed_at")
     private Instant lastAccessedAt;
+
+    private SpaceMember(Space space, User user, SpaceColorKey colorKey, SpaceMemberRole role,
+                        SpaceMemberStatus status, Instant requestedAt, Instant approvedAt) {
+        this.space = space;
+        this.user = user;
+        this.colorKey = colorKey;
+        this.role = role;
+        this.status = status;
+        this.requestedAt = requestedAt;
+        this.approvedAt = approvedAt;
+    }
+
+    public static SpaceMember professor(Space space, User user, SpaceColorKey colorKey, Instant now) {
+        return new SpaceMember(space, user, colorKey, SpaceMemberRole.PROFESSOR,
+                SpaceMemberStatus.APPROVED, now, now);
+    }
+
+    public static SpaceMember student(Space space, User user, SpaceColorKey colorKey,
+                                      boolean autoApprove, Instant now) {
+        return new SpaceMember(space, user, colorKey, SpaceMemberRole.STUDENT,
+                autoApprove ? SpaceMemberStatus.APPROVED : SpaceMemberStatus.PENDING,
+                now, autoApprove ? now : null);
+    }
 }
