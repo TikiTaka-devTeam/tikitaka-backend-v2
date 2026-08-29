@@ -107,4 +107,8 @@ public class User extends BaseTimeEntity {
     public void changePassword(String encodedPassword) {
         this.password = encodedPassword;
     }
+
+    public void changeProfileImage(String profileUrl) {
+        this.profileUrl = profileUrl;
+    }
 }

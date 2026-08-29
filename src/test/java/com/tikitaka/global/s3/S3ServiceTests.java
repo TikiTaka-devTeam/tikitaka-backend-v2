@@ -3,6 +3,7 @@ package com.tikitaka.global.s3;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -48,6 +49,21 @@ class S3ServiceTests {
                 .isInstanceOf(BusinessException.class)
                 .extracting(exception -> ((BusinessException) exception).getErrorCode())
                 .isEqualTo(CommonErrorCode.S3_UPLOAD_FAILED);
+    }
+
+    @Test
+    void deletesManagedObjectResolvedFromVirtualHostedUrl() {
+        service.deleteByUrlIfManaged(
+                "https://test-bucket.s3.ap-northeast-2.amazonaws.com/profiles/key.png");
+
+        verify(s3Client).deleteObject(any(DeleteObjectRequest.class));
+    }
+
+    @Test
+    void ignoresExternalProfileUrl() {
+        service.deleteByUrlIfManaged("https://lh3.googleusercontent.com/profile.png");
+
+        verify(s3Client, never()).deleteObject(any(DeleteObjectRequest.class));
     }
 
     @Test

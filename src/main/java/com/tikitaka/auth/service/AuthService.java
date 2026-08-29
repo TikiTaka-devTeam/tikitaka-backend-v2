@@ -12,7 +12,6 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.tikitaka.auth.exception.AuthErrorCode;
-import com.tikitaka.auth.service.PhoneVerificationTokenService;
 import com.tikitaka.auth.dto.EmailAvailabilityResponse;
 import com.tikitaka.auth.exception.AuthErrorCode;
 import com.tikitaka.auth.dto.LoginRequest;
@@ -50,7 +49,7 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtProvider jwtProvider;
     private final RefreshTokenHasher refreshTokenHasher;
-    private final PhoneVerificationTokenService phoneVerificationTokens;
+    private final PhoneVerificationConsumer phoneVerificationConsumer;
     private final ObjectProvider<S3Service> s3ServiceProvider;
     private final Clock clock;
 
@@ -60,7 +59,7 @@ public class AuthService {
             PasswordEncoder passwordEncoder,
             JwtProvider jwtProvider,
             RefreshTokenHasher refreshTokenHasher,
-            PhoneVerificationTokenService phoneVerificationTokens,
+            PhoneVerificationConsumer phoneVerificationConsumer,
             ObjectProvider<S3Service> s3ServiceProvider,
             Clock clock
     ) {
@@ -69,7 +68,7 @@ public class AuthService {
         this.passwordEncoder = passwordEncoder;
         this.jwtProvider = jwtProvider;
         this.refreshTokenHasher = refreshTokenHasher;
-        this.phoneVerificationTokens = phoneVerificationTokens;
+        this.phoneVerificationConsumer = phoneVerificationConsumer;
         this.s3ServiceProvider = s3ServiceProvider;
         this.clock = clock;
     }
@@ -90,7 +89,7 @@ public class AuthService {
         String phoneNumber = normalizePhone(request.phoneNumber());
         ensureEmailAvailable(email);
         ensurePhoneAvailable(phoneNumber);
-        verifyPhone(request.phoneVerificationToken(), phoneNumber);
+        phoneVerificationConsumer.consume(request.phoneVerificationToken(), phoneNumber);
 
         String profileUrl = uploadProfileImage(profileImage);
         User user = User.createLocal(
@@ -168,16 +167,6 @@ public class AuthService {
             return jwtProvider.validateRefreshToken(refreshToken);
         } catch (JwtException | IllegalArgumentException exception) {
             throw new BusinessException(AuthErrorCode.INVALID_REFRESH_TOKEN, exception);
-        }
-    }
-
-    private void verifyPhone(String verificationToken, String phoneNumber) {
-        try {
-            if (!phoneNumber.equals(phoneVerificationTokens.validate(verificationToken))) {
-                throw new BusinessException(AuthErrorCode.INVALID_PHONE_VERIFICATION);
-            }
-        } catch (JwtException | IllegalArgumentException exception) {
-            throw new BusinessException(AuthErrorCode.INVALID_PHONE_VERIFICATION, exception);
         }
     }
 
