@@ -1,20 +1,5 @@
 package com.tikitaka.assignment.controller;
 
-import java.util.List;
-import java.util.UUID;
-
-import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestPart;
-import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.multipart.MultipartFile;
-
 import com.tikitaka.assignment.dto.request.AssignmentCreateRequest;
 import com.tikitaka.assignment.dto.response.AssignmentCreateResponse;
 import com.tikitaka.assignment.dto.response.AssignmentDetailResponse;
@@ -23,66 +8,83 @@ import com.tikitaka.assignment.dto.response.AssignmentSummaryResponse;
 import com.tikitaka.assignment.service.AssignmentService;
 import com.tikitaka.global.security.CurrentUserResolver;
 import com.tikitaka.user.entity.User;
-
-import jakarta.validation.Valid;
+import io.swagger.v3.oas.annotations.Operation;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.util.List;
+import java.util.UUID;
 
 @RestController
 @RequiredArgsConstructor
-@RequestMapping("/api/v1")
 public class AssignmentController {
 
     private final AssignmentService assignmentService;
     private final CurrentUserResolver currentUserResolver;
 
-    // ASG-001
-    @GetMapping("/spaces/{spaceId}/assignments")
-    public ResponseEntity<AssignmentListResponse> getAssignments(
+    @Operation(summary = "ASG-001 과제 목록 조회")
+    @GetMapping("/api/v1/spaces/{spaceId}/assignments")
+    public AssignmentListResponse getAssignments(
             @PathVariable UUID spaceId,
             Authentication authentication
     ) {
         User currentUser = currentUserResolver.resolve(authentication);
-        return ResponseEntity.ok(assignmentService.getAssignments(spaceId, currentUser));
+
+        return assignmentService.getAssignments(
+                spaceId,
+                currentUser
+        );
     }
 
-    // ASG-002
-    @GetMapping("/spaces/{spaceId}/assignments/summary")
-    public ResponseEntity<AssignmentSummaryResponse> getAssignmentSummary(
+    @Operation(summary = "ASG-002 과제 현황 요약 조회")
+    @GetMapping("/api/v1/spaces/{spaceId}/assignments/summary")
+    public AssignmentSummaryResponse getAssignmentSummary(
             @PathVariable UUID spaceId,
             Authentication authentication
     ) {
         User currentUser = currentUserResolver.resolve(authentication);
-        return ResponseEntity.ok(assignmentService.getAssignmentSummary(spaceId, currentUser));
+
+        return assignmentService.getAssignmentSummary(
+                spaceId,
+                currentUser
+        );
     }
 
-    // ASG-003
-    @GetMapping("/assignments/{assignmentId}")
-    public ResponseEntity<AssignmentDetailResponse> getAssignment(
+    @Operation(summary = "ASG-003 과제 상세 조회")
+    @GetMapping("/api/v1/assignments/{assignmentId}")
+    public AssignmentDetailResponse getAssignment(
             @PathVariable UUID assignmentId,
             Authentication authentication
     ) {
         User currentUser = currentUserResolver.resolve(authentication);
-        return ResponseEntity.ok(assignmentService.getAssignment(assignmentId, currentUser));
+
+        return assignmentService.getAssignment(
+                assignmentId,
+                currentUser
+        );
     }
 
-    // ASG-004
+    @Operation(summary = "ASG-004 과제 등록")
     @PostMapping(
-            value = "/spaces/{spaceId}/assignments",
+            value = "/api/v1/spaces/{spaceId}/assignments",
             consumes = MediaType.MULTIPART_FORM_DATA_VALUE
     )
-    public ResponseEntity<AssignmentCreateResponse> createAssignment(
+    public AssignmentCreateResponse createAssignment(
             @PathVariable UUID spaceId,
-            @Valid @RequestPart("assignment_data") AssignmentCreateRequest assignmentData,
+            @RequestPart("assignment_data") AssignmentCreateRequest assignmentData,
             @RequestPart(value = "files", required = false) List<MultipartFile> files,
             Authentication authentication
     ) {
         User currentUser = currentUserResolver.resolve(authentication);
-        AssignmentCreateResponse response = assignmentService.createAssignment(
+
+        return assignmentService.createAssignment(
                 spaceId,
                 assignmentData,
                 files,
                 currentUser
         );
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 }
