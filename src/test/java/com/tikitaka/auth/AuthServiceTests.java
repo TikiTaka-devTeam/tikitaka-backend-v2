@@ -1,7 +1,7 @@
 package com.tikitaka.auth;
 
 import com.tikitaka.auth.exception.AuthErrorCode;
-import com.tikitaka.auth.service.PhoneVerificationTokenService;
+import com.tikitaka.auth.service.PhoneVerificationConsumer;
 import com.tikitaka.auth.service.AuthService;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -47,7 +47,7 @@ class AuthServiceTests {
     private final PasswordEncoder passwordEncoder = mock(PasswordEncoder.class);
     private final JwtProvider jwtProvider = mock(JwtProvider.class);
     private final RefreshTokenHasher refreshTokenHasher = mock(RefreshTokenHasher.class);
-    private final PhoneVerificationTokenService phoneTokens = mock(PhoneVerificationTokenService.class);
+    private final PhoneVerificationConsumer phoneVerificationConsumer = mock(PhoneVerificationConsumer.class);
     @SuppressWarnings("unchecked")
     private final ObjectProvider<S3Service> s3Provider = mock(ObjectProvider.class);
     private AuthService authService;
@@ -60,7 +60,7 @@ class AuthServiceTests {
                 passwordEncoder,
                 jwtProvider,
                 refreshTokenHasher,
-                phoneTokens,
+                phoneVerificationConsumer,
                 s3Provider,
                 Clock.fixed(NOW, ZoneOffset.UTC));
     }
@@ -86,12 +86,12 @@ class AuthServiceTests {
                 "?????",
                 "??????",
                 "20231370");
-        when(phoneTokens.validate("verification-token")).thenReturn("01012345678");
         when(passwordEncoder.encode("Test1234!")).thenReturn("encoded-password");
         when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         authService.signup(request, null);
 
+        verify(phoneVerificationConsumer).consume("verification-token", "01012345678");
         ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
         verify(userRepository).save(userCaptor.capture());
         assertThat(userCaptor.getValue().getEmail()).isEqualTo("user@example.com");
