@@ -6,10 +6,16 @@ import com.tikitaka.assignment.dto.response.AssignmentDetailResponse;
 import com.tikitaka.assignment.dto.response.AssignmentListResponse;
 import com.tikitaka.assignment.dto.response.AssignmentSummaryResponse;
 import com.tikitaka.assignment.service.AssignmentService;
+import com.tikitaka.global.config.OpenApiConfig;
 import com.tikitaka.global.security.CurrentUserResolver;
 import com.tikitaka.user.entity.User;
+
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
+
 import lombok.RequiredArgsConstructor;
+
 import org.springframework.http.MediaType;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
@@ -18,8 +24,13 @@ import org.springframework.web.multipart.MultipartFile;
 import java.util.List;
 import java.util.UUID;
 
+@Tag(
+        name = "Assignment",
+        description = "과제 조회 및 등록 API"
+)
 @RestController
 @RequiredArgsConstructor
+@SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
 public class AssignmentController {
 
     private final AssignmentService assignmentService;
@@ -31,7 +42,8 @@ public class AssignmentController {
             @PathVariable UUID spaceId,
             Authentication authentication
     ) {
-        User currentUser = currentUserResolver.resolve(authentication);
+        User currentUser =
+                currentUserResolver.resolve(authentication);
 
         return assignmentService.getAssignments(
                 spaceId,
@@ -45,7 +57,8 @@ public class AssignmentController {
             @PathVariable UUID spaceId,
             Authentication authentication
     ) {
-        User currentUser = currentUserResolver.resolve(authentication);
+        User currentUser =
+                currentUserResolver.resolve(authentication);
 
         return assignmentService.getAssignmentSummary(
                 spaceId,
@@ -59,7 +72,8 @@ public class AssignmentController {
             @PathVariable UUID assignmentId,
             Authentication authentication
     ) {
-        User currentUser = currentUserResolver.resolve(authentication);
+        User currentUser =
+                currentUserResolver.resolve(authentication);
 
         return assignmentService.getAssignment(
                 assignmentId,
@@ -74,11 +88,20 @@ public class AssignmentController {
     )
     public AssignmentCreateResponse createAssignment(
             @PathVariable UUID spaceId,
-            @RequestPart("assignment_data") AssignmentCreateRequest assignmentData,
-            @RequestPart(value = "files", required = false) List<MultipartFile> files,
+
+            @RequestPart("assignment_data")
+            AssignmentCreateRequest assignmentData,
+
+            @RequestPart(
+                    value = "files",
+                    required = false
+            )
+            List<MultipartFile> files,
+
             Authentication authentication
     ) {
-        User currentUser = currentUserResolver.resolve(authentication);
+        User currentUser =
+                currentUserResolver.resolve(authentication);
 
         return assignmentService.createAssignment(
                 spaceId,
