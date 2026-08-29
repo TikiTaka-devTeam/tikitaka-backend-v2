@@ -21,8 +21,8 @@ public record AssignmentDetailResponse(
         @JsonProperty("created_at")
         Instant createdAt,
 
-        @JsonProperty("professor_name")
-        String professorName,
+        @JsonProperty("writer_name")
+        String writerName,
 
         @JsonProperty("view_count")
         Integer viewCount,
