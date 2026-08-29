@@ -91,4 +91,8 @@ public class Space extends BaseTimeEntity {
         this.activeStatus = true;
         this.archivedAt = null;
     }
+
+    public void updateAutoApprove(boolean autoApprove) {
+        this.autoApprove = autoApprove;
+    }
 }

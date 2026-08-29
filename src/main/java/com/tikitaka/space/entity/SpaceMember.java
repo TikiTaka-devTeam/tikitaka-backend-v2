@@ -88,4 +88,20 @@ public class SpaceMember extends BaseTimeEntity {
                 autoApprove ? SpaceMemberStatus.APPROVED : SpaceMemberStatus.PENDING,
                 now, autoApprove ? now : null);
     }
+
+    public void approve(Instant now) {
+        this.status = SpaceMemberStatus.APPROVED;
+        this.approvedAt = now;
+        this.deniedAt = null;
+    }
+
+    public void deny(Instant now) {
+        this.status = SpaceMemberStatus.DENIED;
+        this.deniedAt = now;
+        this.approvedAt = null;
+    }
+
+    public void remove(Instant now) {
+        this.removedAt = now;
+    }
 }

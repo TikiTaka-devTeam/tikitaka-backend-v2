@@ -22,4 +22,18 @@ public interface SpaceMemberRepository extends JpaRepository<SpaceMember, UUID> 
             UUID spaceId, UUID userId, List<SpaceMemberStatus> statuses);
 
     long countByUserId(UUID userId);
+
+    List<SpaceMember> findAllBySpaceIdAndStatusAndRemovedAtIsNull(
+        UUID spaceId,
+        SpaceMemberStatus status);
+
+        Optional<SpaceMember> findBySpaceIdAndUserIdAndStatusAndRemovedAtIsNull(
+                UUID spaceId,
+                UUID userId,
+                SpaceMemberStatus status);
+
+        Optional<SpaceMember> findByIdAndSpaceId(
+                UUID id,
+                UUID spaceId);
+                
 }
