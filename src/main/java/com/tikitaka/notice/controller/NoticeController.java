@@ -32,6 +32,11 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 
+
+@Tag(
+        name = "Notice",
+        description = "공지사항 생성/조회/수정/삭제 API"
+)
 @RestController
 @RequiredArgsConstructor
 @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)

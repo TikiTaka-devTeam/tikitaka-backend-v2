@@ -31,6 +31,11 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 
+
+@Tag(
+        name = "Assignment",
+        description = "Assignment 생성/조회 API"
+)
 @RestController
 @RequiredArgsConstructor
 @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
