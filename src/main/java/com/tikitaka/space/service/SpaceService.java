@@ -28,6 +28,7 @@ import com.tikitaka.space.entity.Schedule;
 import com.tikitaka.space.entity.Space;
 import com.tikitaka.space.entity.SpaceColorKey;
 import com.tikitaka.space.entity.SpaceMember;
+import com.tikitaka.space.entity.SpaceMemberRole;
 import com.tikitaka.space.entity.SpaceMemberStatus;
 import com.tikitaka.space.exception.SpaceErrorCode;
 import com.tikitaka.space.repository.ScheduleRepository;
@@ -170,7 +171,8 @@ public class SpaceService {
 
         List<PendingSpaceResponse> pendingSpaces =
                 !archived
-                        && currentUser.getAccountType() == AccountType.STUDENT
+                        && currentUser.getAccountType()
+                        == AccountType.STUDENT
                         ? getPendingSpaces(currentUser)
                         : List.of();
 
@@ -190,7 +192,7 @@ public class SpaceService {
                         : "ACTIVE";
 
         return spaceMemberRepository
-                .findAllByUserIdAndStatus(
+                .findAllByUserIdAndStatusAndRemovedAtIsNull(
                         currentUser.getId(),
                         SpaceMemberStatus.APPROVED
                 )
@@ -221,7 +223,7 @@ public class SpaceService {
             User currentUser
     ) {
         return spaceMemberRepository
-                .findAllByUserIdAndStatus(
+                .findAllByUserIdAndStatusAndRemovedAtIsNull(
                         currentUser.getId(),
                         SpaceMemberStatus.PENDING
                 )
@@ -276,7 +278,9 @@ public class SpaceService {
             User currentUser,
             SpaceJoinRequest request
     ) {
-        requireStudentAccount(currentUser);
+        requireStudentAccount(
+                currentUser
+        );
 
         Space space =
                 spaceRepository
@@ -296,8 +300,9 @@ public class SpaceService {
             );
         }
 
+        // 현재 승인된 멤버인지 확인
         spaceMemberRepository
-                .findBySpaceIdAndUserIdAndStatus(
+                .findBySpaceIdAndUserIdAndStatusAndRemovedAtIsNull(
                         space.getId(),
                         currentUser.getId(),
                         SpaceMemberStatus.APPROVED
@@ -308,8 +313,9 @@ public class SpaceService {
                     );
                 });
 
+        // 현재 가입 승인 대기 중인지 확인
         spaceMemberRepository
-                .findBySpaceIdAndUserIdAndStatus(
+                .findBySpaceIdAndUserIdAndStatusAndRemovedAtIsNull(
                         space.getId(),
                         currentUser.getId(),
                         SpaceMemberStatus.PENDING
@@ -329,14 +335,36 @@ public class SpaceService {
                         currentUser.getId()
                 );
 
+        /*
+         * 과거에 내보내진 멤버가 있으면
+         * 새 row를 만들지 않고 기존 row를 다시 활성화한다.
+         */
         SpaceMember member =
-                SpaceMember.student(
-                        space,
-                        currentUser,
-                        colorKey,
-                        space.isAutoApprove(),
-                        now
-                );
+                spaceMemberRepository
+                        .findFirstBySpaceIdAndUserIdAndRemovedAtIsNotNullOrderByRemovedAtDesc(
+                                space.getId(),
+                                currentUser.getId()
+                        )
+                        .map(removedMember -> {
+
+                            removedMember.rejoin(
+                                    colorKey,
+                                    space.isAutoApprove(),
+                                    now
+                            );
+
+                            return removedMember;
+                        })
+                        .orElseGet(() ->
+
+                                SpaceMember.student(
+                                        space,
+                                        currentUser,
+                                        colorKey,
+                                        space.isAutoApprove(),
+                                        now
+                                )
+                        );
 
         spaceMemberRepository.save(
                 member
@@ -360,14 +388,15 @@ public class SpaceService {
             SpaceUpdateRequest request
     ) {
         Space space =
-                getSpace(spaceId);
+                getSpace(
+                        spaceId
+                );
 
         requireSpaceProfessor(
                 currentUser,
                 space
         );
 
-        // 보관 상태에서는 Space 정보 수정 불가
         if (!space.isActiveStatus()) {
             throw new BusinessException(
                     SpaceErrorCode
@@ -461,7 +490,9 @@ public class SpaceService {
             UUID spaceId
     ) {
         Space space =
-                getSpace(spaceId);
+                getSpace(
+                        spaceId
+                );
 
         requireSpaceProfessor(
                 currentUser,
@@ -490,7 +521,9 @@ public class SpaceService {
             UUID spaceId
     ) {
         Space space =
-                getSpace(spaceId);
+                getSpace(
+                        spaceId
+                );
 
         requireSpaceProfessor(
                 currentUser,
@@ -517,14 +550,15 @@ public class SpaceService {
             UUID spaceId
     ) {
         Space space =
-                getSpace(spaceId);
+                getSpace(
+                        spaceId
+                );
 
         requireSpaceProfessor(
                 currentUser,
                 space
         );
 
-        // 활성 상태의 Space는 바로 삭제할 수 없음 - 보관된상태일때만
         if (space.isActiveStatus()) {
             throw new BusinessException(
                     SpaceErrorCode
@@ -532,7 +566,6 @@ public class SpaceService {
             );
         }
 
-        // ARCHIVED 상태에서만 삭제 가능
         spaceRepository.delete(
                 space
         );
@@ -614,12 +647,19 @@ public class SpaceService {
         Space space =
                 member.getSpace();
 
+        String spaceCode =
+                member.getRole()
+                        == SpaceMemberRole.PROFESSOR
+                        ? space.getSpaceCode()
+                        : null;
+
         return new SpaceListResponse(
                 space.getId(),
                 space.getSpaceName(),
                 space.getYear(),
                 space.getSemester(),
                 member.getColorKey(),
+                spaceCode,
                 status
         );
     }
@@ -632,7 +672,7 @@ public class SpaceService {
 
         long currentCount =
                 spaceMemberRepository
-                        .countByUserId(
+                        .countByUserIdAndRemovedAtIsNull(
                                 userId
                         );
 
