@@ -78,6 +78,12 @@ public enum SpaceErrorCode implements ErrorCode {
             "수업 시작 시간은 종료 시간보다 빨라야 합니다."
     ),
 
+    DUPLICATE_SCHEDULE(
+            HttpStatus.BAD_REQUEST,
+            "SPACE_DUPLICATE_SCHEDULE",
+            "같은 요일에 겹치는 수업 시간을 등록할 수 없습니다."
+    ),
+
     INVALID_SPACE_NAME(
             HttpStatus.BAD_REQUEST,
             "SPACE_INVALID_NAME",

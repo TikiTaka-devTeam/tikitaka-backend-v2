@@ -623,9 +623,23 @@ public class SpaceService {
         }
     }
 
+    /**
+     * Space 수업 시간 검증
+     *
+     * 1. 시작 시간은 종료 시간보다 빨라야 한다.
+     * 2. 같은 요일에 서로 겹치는 시간대를 등록할 수 없다.
+     * 3. 한 수업의 종료 시간과 다음 수업의 시작 시간이 같은 것은 허용한다.
+     */
     private void validateSchedules(
             List<ScheduleRequest> schedules
     ) {
+        if (schedules == null || schedules.isEmpty()) {
+            return;
+        }
+
+        /*
+         * 시작/종료 시간 검증
+         */
         for (ScheduleRequest schedule : schedules) {
 
             if (!schedule.startTime()
@@ -636,6 +650,57 @@ public class SpaceService {
                 throw new BusinessException(
                         SpaceErrorCode.INVALID_SCHEDULE
                 );
+            }
+        }
+
+        /*
+         * 같은 요일의 수업 시간 중복 검증
+         *
+         * A.start < B.end
+         * &&
+         * B.start < A.end
+         *
+         * 위 두 조건이 모두 참이면 두 시간대가 겹친다.
+         */
+        for (int i = 0;
+             i < schedules.size();
+             i++) {
+
+            ScheduleRequest current =
+                    schedules.get(i);
+
+            for (int j = i + 1;
+                 j < schedules.size();
+                 j++) {
+
+                ScheduleRequest other =
+                        schedules.get(j);
+
+                /*
+                 * 요일이 다르면 시간대가 같아도 허용
+                 */
+                if (current.day()
+                        != other.day()) {
+
+                    continue;
+                }
+
+                boolean overlaps =
+                        current.startTime()
+                                .isBefore(
+                                        other.endTime()
+                                )
+                        &&
+                        other.startTime()
+                                .isBefore(
+                                        current.endTime()
+                                );
+
+                if (overlaps) {
+                    throw new BusinessException(
+                            SpaceErrorCode.DUPLICATE_SCHEDULE
+                    );
+                }
             }
         }
     }
