@@ -39,7 +39,7 @@ public class User extends BaseTimeEntity {
     @Column(name = "account_type", nullable = false, length = 20)
     private AccountType accountType;
 
-    @Column(name = "phone_number", unique = true, length = 20)
+    @Column(name = "phone_number", nullable = false, unique = true, length = 11)
     private String phoneNumber;
 
     @Column(nullable = false, length = 100)
@@ -57,4 +57,58 @@ public class User extends BaseTimeEntity {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private UserStatus status = UserStatus.ACTIVE;
+
+    // 일반 회원가입 정보를 받아 User를 생성하며, 외부에서는 createLocal()을 통해서만 호출
+    private User(
+            String email,
+            String password,
+            String name,
+            AccountType accountType,
+            String phoneNumber,
+            String univ,
+            String major,
+            String memberIdNumber,
+            String profileUrl
+    ) {
+        this.email = email;
+        this.password = password;
+        this.name = name;
+        this.accountType = accountType;
+        this.phoneNumber = phoneNumber;
+        this.univ = univ;
+        this.major = major;
+        this.memberIdNumber = memberIdNumber;
+        this.profileUrl = profileUrl;
+    }
+
+    public static User createLocal(
+            String email,
+            String encodedPassword,
+            String name,
+            AccountType accountType,
+            String phoneNumber,
+            String univ,
+            String major,
+            String memberIdNumber,
+            String profileUrl
+    ) {
+        return new User(
+                email,
+                encodedPassword,
+                name,
+                accountType,
+                phoneNumber,
+                univ,
+                major,
+                memberIdNumber,
+                profileUrl);
+    }
+
+    public void changePassword(String encodedPassword) {
+        this.password = encodedPassword;
+    }
+
+    public void changeProfileImage(String profileUrl) {
+        this.profileUrl = profileUrl;
+    }
 }

@@ -56,4 +56,43 @@ public class Space extends BaseTimeEntity {
 
     @Column(name = "archived_at")
     private Instant archivedAt;
+
+    private Space(User professor, String spaceName, Integer year, String semester,
+                  String classroom, String spaceCode) {
+        this.professor = professor;
+        this.spaceName = spaceName;
+        this.year = year;
+        this.semester = semester;
+        this.classroom = classroom;
+        this.spaceCode = spaceCode;
+        this.autoApprove = false;
+        this.activeStatus = true;
+    }
+
+    public static Space create(User professor, String spaceName, Integer year, String semester,
+                               String classroom, String spaceCode) {
+        return new Space(professor, spaceName, year, semester, classroom, spaceCode);
+    }
+
+    public void updateSpaceName(String spaceName) {
+        this.spaceName = spaceName;
+    }
+
+    public void updateClassroom(String classroom) {
+        this.classroom = classroom;
+    }
+
+    public void archive(Instant archivedAt) {
+        this.activeStatus = false;
+        this.archivedAt = archivedAt;
+    }
+
+    public void restore() {
+        this.activeStatus = true;
+        this.archivedAt = null;
+    }
+
+    public void updateAutoApprove(boolean autoApprove) {
+        this.autoApprove = autoApprove;
+    }
 }

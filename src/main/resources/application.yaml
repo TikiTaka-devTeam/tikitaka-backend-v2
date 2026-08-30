@@ -16,6 +16,20 @@ management:
       exposure:
         include: health, info
 
+solapi:
+  api-key: ${SOLAPI_API_KEY}
+  api-secret: ${SOLAPI_API_SECRET}
+  sender-number: ${SOLAPI_SENDER_NUMBER}
+
+security:
+  phone-verification:
+    pepper: ${PHONE_VERIFICATION_PEPPER}
+  jwt:
+    issuer: ${JWT_ISSUER:tikitaka}
+    secret: ${JWT_SECRET}
+    access-token-ttl: ${JWT_ACCESS_TOKEN_TTL:15m}
+    refresh-token-ttl: ${JWT_REFRESH_TOKEN_TTL:14d}
+    refresh-token-pepper: ${REFRESH_TOKEN_PEPPER}
 aws:
   s3:
     upload-policies:
@@ -102,3 +116,13 @@ aws:
           - image/gif
           - application/zip
           - application/x-zip-compressed
+
+oauth:
+  google:
+    client-id: ${GOOGLE_OAUTH_CLIENT_ID:}
+    client-secret: ${GOOGLE_OAUTH_CLIENT_SECRET:}
+    redirect-uri: ${GOOGLE_OAUTH_REDIRECT_URI:http://localhost:8080/api/v1/auth/oauth/google/callback}
+  kakao:
+    client-id: ${KAKAO_OAUTH_CLIENT_ID:}
+    client-secret: ${KAKAO_OAUTH_CLIENT_SECRET:}
+    redirect-uri: ${KAKAO_OAUTH_REDIRECT_URI:http://localhost:8080/api/v1/auth/oauth/kakao/callback}

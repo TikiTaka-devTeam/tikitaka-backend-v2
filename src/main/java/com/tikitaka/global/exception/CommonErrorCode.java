@@ -5,6 +5,7 @@ import org.springframework.http.HttpStatus;
 public enum CommonErrorCode implements ErrorCode {
     INVALID_INPUT(HttpStatus.BAD_REQUEST, "COMMON_INVALID_INPUT", "요청 값이 올바르지 않습니다."),
     INVALID_REQUEST(HttpStatus.BAD_REQUEST, "COMMON_INVALID_REQUEST", "요청을 읽을 수 없습니다."),
+    UNAUTHORIZED(HttpStatus.UNAUTHORIZED, "COMMON_UNAUTHORIZED", "인증이 필요합니다."),
     INVALID_CURSOR(HttpStatus.BAD_REQUEST, "COMMON_INVALID_CURSOR", "커서 값이 올바르지 않습니다."),
     NOT_ACCEPTABLE(HttpStatus.NOT_ACCEPTABLE, "COMMON_NOT_ACCEPTABLE", "지원하지 않는 응답 형식입니다."),
     UNSUPPORTED_MEDIA_TYPE(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "COMMON_UNSUPPORTED_MEDIA_TYPE", "지원하지 않는 Content-Type입니다."),
@@ -29,7 +30,15 @@ public enum CommonErrorCode implements ErrorCode {
         this.message = message;
     }
 
-    public HttpStatus getStatus() { return status; }
-    public String getCode() { return code; }
-    public String getMessage() { return message; }
+    public HttpStatus getStatus() {
+        return status;
+    }
+
+    public String getCode() {
+        return code;
+    }
+
+    public String getMessage() {
+        return message;
+    }
 }

@@ -19,6 +19,10 @@ spring:
   flyway:
     enabled: true
 
+security:
+  jwt:
+    secret: ${JWT_SECRET:bG9jYWwtZGV2ZWxvcG1lbnQtb25seS1qd3Qtc2VjcmV0LWtleS0zMmJ5dGVz}
+    refresh-token-pepper: ${REFRESH_TOKEN_PEPPER:local-development-only-refresh-token-pepper}
 aws:
   s3:
     bucket: ${AWS_S3_BUCKET:tikitaka-local}

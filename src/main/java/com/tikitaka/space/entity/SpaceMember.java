@@ -65,4 +65,103 @@ public class SpaceMember extends BaseTimeEntity {
 
     @Column(name = "last_accessed_at")
     private Instant lastAccessedAt;
+
+    private SpaceMember(
+            Space space,
+            User user,
+            SpaceColorKey colorKey,
+            SpaceMemberRole role,
+            SpaceMemberStatus status,
+            Instant requestedAt,
+            Instant approvedAt
+    ) {
+        this.space = space;
+        this.user = user;
+        this.colorKey = colorKey;
+        this.role = role;
+        this.status = status;
+        this.requestedAt = requestedAt;
+        this.approvedAt = approvedAt;
+    }
+
+    public static SpaceMember professor(
+            Space space,
+            User user,
+            SpaceColorKey colorKey,
+            Instant now
+    ) {
+        return new SpaceMember(
+                space,
+                user,
+                colorKey,
+                SpaceMemberRole.PROFESSOR,
+                SpaceMemberStatus.APPROVED,
+                now,
+                now
+        );
+    }
+
+    public static SpaceMember student(
+            Space space,
+            User user,
+            SpaceColorKey colorKey,
+            boolean autoApprove,
+            Instant now
+    ) {
+        return new SpaceMember(
+                space,
+                user,
+                colorKey,
+                SpaceMemberRole.STUDENT,
+                autoApprove
+                        ? SpaceMemberStatus.APPROVED
+                        : SpaceMemberStatus.PENDING,
+                now,
+                autoApprove
+                        ? now
+                        : null
+        );
+    }
+
+    public void approve(Instant now) {
+        this.status = SpaceMemberStatus.APPROVED;
+        this.approvedAt = now;
+        this.deniedAt = null;
+    }
+
+    public void deny(Instant now) {
+        this.status = SpaceMemberStatus.DENIED;
+        this.deniedAt = now;
+        this.approvedAt = null;
+    }
+
+    public void remove(Instant now) {
+        this.removedAt = now;
+    }
+
+    // 내보내진 학생이 다시 Space에 참가 신청할 때 사용
+    public void rejoin(
+            SpaceColorKey colorKey,
+            boolean autoApprove,
+            Instant now
+    ) {
+        this.colorKey = colorKey;
+        this.role = SpaceMemberRole.STUDENT;
+
+        this.status =
+                autoApprove
+                        ? SpaceMemberStatus.APPROVED
+                        : SpaceMemberStatus.PENDING;
+
+        this.requestedAt = now;
+
+        this.approvedAt =
+                autoApprove
+                        ? now
+                        : null;
+
+        this.deniedAt = null;
+        this.removedAt = null;
+        this.lastAccessedAt = null;
+    }
 }
