@@ -11,30 +11,36 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
+import com.tikitaka.global.s3.S3Service;
 import com.tikitaka.global.sms.SmsSender;
 
 @SpringBootTest
 @ActiveProfiles("test")
 @Testcontainers
 class TikitakaBackendApplicationTests {
+
 	@Autowired
 	ObjectMapper objectMapper;
 
 	@MockitoBean
 	SmsSender smsSender;
 
+	@MockitoBean
+	S3Service s3Service;
+
 	@Container
-	static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>(
-			DockerImageName.parse("pgvector/pgvector:0.8.6-pg16")
-					.asCompatibleSubstituteFor("postgres"));
+	static final PostgreSQLContainer<?> POSTGRES =
+			new PostgreSQLContainer<>(
+					DockerImageName.parse("pgvector/pgvector:0.8.6-pg16")
+							.asCompatibleSubstituteFor("postgres"));
 
 	@DynamicPropertySource
 	static void databaseProperties(DynamicPropertyRegistry registry) {
@@ -51,21 +57,35 @@ class TikitakaBackendApplicationTests {
 	void usesSnakeCaseForJsonWhileJavaUsesCamelCase() throws Exception {
 		UUID userId = UUID.randomUUID();
 		Instant createdAt = Instant.parse("2026-08-21T03:00:00Z");
-		JsonNamingSample sample = new JsonNamingSample(userId, createdAt);
 
-		JsonNode json = objectMapper.readTree(objectMapper.writeValueAsString(sample));
+		JsonNamingSample sample =
+				new JsonNamingSample(userId, createdAt);
 
-		assertThat(json.get("user_id").asText()).isEqualTo(userId.toString());
-		assertThat(json.get("created_at").asText()).isEqualTo(createdAt.toString());
-		assertThat(json.has("userId")).isFalse();
+		JsonNode json =
+				objectMapper.readTree(
+						objectMapper.writeValueAsString(sample));
 
-		JsonNamingSample restored = objectMapper.readValue(
-				"{\"user_id\":\"%s\",\"created_at\":\"%s\"}".formatted(userId, createdAt),
-				JsonNamingSample.class);
-		assertThat(restored).isEqualTo(sample);
+		assertThat(json.get("user_id").asText())
+				.isEqualTo(userId.toString());
+
+		assertThat(json.get("created_at").asText())
+				.isEqualTo(createdAt.toString());
+
+		assertThat(json.has("userId"))
+				.isFalse();
+
+		JsonNamingSample restored =
+				objectMapper.readValue(
+						"{\"user_id\":\"%s\",\"created_at\":\"%s\"}"
+								.formatted(userId, createdAt),
+						JsonNamingSample.class);
+
+		assertThat(restored)
+				.isEqualTo(sample);
 	}
 
-	record JsonNamingSample(UUID userId, Instant createdAt) {
+	record JsonNamingSample(
+			UUID userId,
+			Instant createdAt) {
 	}
-
 }
