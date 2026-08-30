@@ -1,5 +1,6 @@
 package com.tikitaka.notice.service;
 
+import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -8,6 +9,8 @@ import java.util.UUID;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.tikitaka.global.common.cursor.CursorCodec;
@@ -50,20 +53,15 @@ public class NoticeService {
     private static final int MAX_SIZE = 100;
     private static final int PREVIEW_LENGTH = 50;
 
-    private final SpaceNoticeRepository spaceNoticeRepository;
+    private final SpaceNoticeRepository noticeRepository;
     private final NoticeFileRepository noticeFileRepository;
     private final NoticeReadRepository noticeReadRepository;
-
     private final SpaceMemberRepository spaceMemberRepository;
     private final SpaceMemberPermissionRepository permissionRepository;
-
     private final S3Service s3Service;
     private final CursorCodec cursorCodec;
 
-    /**
-     * NOT-001
-     * 공지사항 목록 조회
-     */
+    // NOT-001
     public NoticeListResponse getNotices(
             UUID spaceId,
             String cursor,
@@ -72,10 +70,11 @@ public class NoticeService {
     ) {
         requireApprovedMember(
                 spaceId,
-                currentUser.getId()
+                currentUser
         );
 
-        int pageSize = normalizeSize(size);
+        int pageSize =
+                normalizeSize(size);
 
         NoticeCursor decoded =
                 cursorCodec.decodeOrNull(
@@ -85,17 +84,10 @@ public class NoticeService {
 
         List<SpaceNotice> fetched;
 
-        /*
-         * 첫 조회와 다음 페이지 조회를 분리한다.
-         *
-         * 첫 조회에서 createdAt = null, id = null 값을
-         * JPQL 조건에 전달하면 DB/Hibernate 환경에 따라
-         * 타입 추론 문제가 발생할 수 있으므로 별도 쿼리를 사용한다.
-         */
         if (decoded == null) {
 
             fetched =
-                    spaceNoticeRepository.findFirstPage(
+                    noticeRepository.findFirstPage(
                             spaceId,
                             PageRequest.of(
                                     0,
@@ -106,7 +98,7 @@ public class NoticeService {
         } else {
 
             fetched =
-                    spaceNoticeRepository.findNextPage(
+                    noticeRepository.findNextPage(
                             spaceId,
                             decoded.createdAt(),
                             decoded.id(),
@@ -117,10 +109,6 @@ public class NoticeService {
                     );
         }
 
-        /*
-         * pageSize보다 한 개 더 조회해서
-         * 다음 페이지 존재 여부를 판단한다.
-         */
         boolean hasNext =
                 fetched.size() > pageSize;
 
@@ -153,12 +141,8 @@ public class NoticeService {
 
         String nextCursor = null;
 
-        /*
-         * 다음 페이지가 존재하면
-         * 현재 페이지 마지막 공지의
-         * createdAt + id로 cursor를 생성한다.
-         */
-        if (hasNext && !page.isEmpty()) {
+        if (hasNext
+                && !page.isEmpty()) {
 
             SpaceNotice last =
                     page.get(
@@ -175,7 +159,7 @@ public class NoticeService {
         }
 
         long totalCount =
-                spaceNoticeRepository
+                noticeRepository
                         .countBySpaceId(
                                 spaceId
                         );
@@ -196,45 +180,36 @@ public class NoticeService {
         );
     }
 
-    /**
-     * NOT-002
-     * 공지 상세 조회 및 읽음 처리
-     */
+    // NOT-002
     @Transactional
     public NoticeDetailResponse getNotice(
             UUID noticeId,
             User currentUser
     ) {
-
         SpaceNotice notice =
                 getNoticeEntity(
                         noticeId
                 );
 
         requireApprovedMember(
-                notice.getSpace().getId(),
-                currentUser.getId()
+                notice.getSpace()
+                        .getId(),
+                currentUser
         );
 
-        /*
-         * 처음 읽은 경우 notice_reads 생성.
-         *
-         * 이미 읽은 공지라면 기존 값을 그대로 사용한다.
-         */
         NoticeRead read =
                 noticeReadRepository
                         .findByNoticeIdAndUserId(
                                 noticeId,
                                 currentUser.getId()
                         )
-                        .orElseGet(
-                                () ->
-                                        noticeReadRepository.save(
-                                                NoticeRead.create(
-                                                        notice,
-                                                        currentUser
-                                                )
+                        .orElseGet(() ->
+                                noticeReadRepository.save(
+                                        NoticeRead.create(
+                                                notice,
+                                                currentUser
                                         )
+                                )
                         );
 
         notice.increaseViewCount();
@@ -245,8 +220,12 @@ public class NoticeService {
                                 noticeId
                         )
                         .stream()
-                        .map(
-                                NoticeFileResponse::from
+                        .map(file ->
+                                new NoticeFileResponse(
+                                        file.getId(),
+                                        file.getFileName(),
+                                        file.getFileUrl()
+                                )
                         )
                         .toList();
 
@@ -254,7 +233,8 @@ public class NoticeService {
                 notice.getId(),
                 notice.getTitle(),
                 notice.getCreatedAt(),
-                notice.getAuthor().getName(),
+                notice.getAuthor()
+                        .getName(),
                 notice.getViewCount(),
                 true,
                 read.getReadAt(),
@@ -263,10 +243,7 @@ public class NoticeService {
         );
     }
 
-    /**
-     * NOT-003
-     * 공지 등록
-     */
+    // NOT-003
     @Transactional
     public NoticeCreateResponse createNotice(
             UUID spaceId,
@@ -274,25 +251,32 @@ public class NoticeService {
             List<MultipartFile> files,
             User currentUser
     ) {
-
         SpaceMember member =
                 requireNoticeManager(
                         spaceId,
-                        currentUser.getId()
+                        currentUser
                 );
 
         SpaceNotice notice =
                 SpaceNotice.create(
                         member.getSpace(),
                         currentUser,
-                        request.title().trim(),
-                        request.content().trim()
+                        request.title()
+                                .trim(),
+                        request.content()
+                                .trim()
                 );
 
-        spaceNoticeRepository.save(
+        noticeRepository.save(
                 notice
         );
 
+        /*
+         * 신규 S3 업로드.
+         *
+         * 이후 DB 트랜잭션이 rollback되면
+         * 업로드된 S3 파일도 삭제하도록 등록한다.
+         */
         uploadFiles(
                 notice,
                 files
@@ -305,10 +289,7 @@ public class NoticeService {
         );
     }
 
-    /**
-     * NOT-004
-     * 공지 수정
-     */
+    // NOT-004
     @Transactional
     public NoticeUpdateResponse updateNotice(
             UUID noticeId,
@@ -316,20 +297,22 @@ public class NoticeService {
             List<MultipartFile> newFiles,
             User currentUser
     ) {
-
         SpaceNotice notice =
                 getNoticeEntity(
                         noticeId
                 );
 
         requireNoticeManager(
-                notice.getSpace().getId(),
-                currentUser.getId()
+                notice.getSpace()
+                        .getId(),
+                currentUser
         );
 
         notice.update(
-                request.title().trim(),
-                request.content().trim()
+                request.title()
+                        .trim(),
+                request.content()
+                        .trim()
         );
 
         List<NoticeFile> existingFiles =
@@ -338,26 +321,25 @@ public class NoticeService {
                                 noticeId
                         );
 
-        /*
-         * retained_file_ids 규칙
-         *
-         * null
-         * → 기존 첨부파일 전체 유지
-         *
-         * []
-         * → 기존 첨부파일 전체 삭제
-         *
-         * [id1, id2]
-         * → 해당 파일만 유지
-         */
-        if (request.retainedFileIds() != null) {
+        List<UUID> retainedFileIds =
+                request.retainedFileIds();
 
-            Set<UUID> retainedIds =
+        /*
+         * retained_file_ids가 null이면
+         * 기존 파일 전체 유지.
+         */
+        if (retainedFileIds != null) {
+
+            Set<UUID> retainedSet =
                     new HashSet<>(
-                            request.retainedFileIds()
+                            retainedFileIds
                     );
 
-            Set<UUID> existingIds =
+            /*
+             * retained_file_ids에 다른 공지의 파일 ID가
+             * 들어오는 것을 방지한다.
+             */
+            Set<UUID> existingFileIds =
                     existingFiles.stream()
                             .map(
                                     NoticeFile::getId
@@ -366,58 +348,75 @@ public class NoticeService {
                                     java.util.stream.Collectors.toSet()
                             );
 
-            /*
-             * 다른 공지의 fileId 등을 전달한 경우 방지
-             */
-            if (!existingIds.containsAll(
-                    retainedIds
-            )) {
+            if (!existingFileIds
+                    .containsAll(
+                            retainedSet
+                    )) {
+
                 throw new BusinessException(
-                        NoticeErrorCode.INVALID_RETAINED_FILE
+                        NoticeErrorCode
+                                .INVALID_RETAINED_FILE
                 );
             }
 
             List<NoticeFile> filesToDelete =
                     existingFiles.stream()
-                            .filter(
-                                    file ->
-                                            !retainedIds.contains(
-                                                    file.getId()
-                                            )
+                            .filter(file ->
+                                    !retainedSet.contains(
+                                            file.getId()
+                                    )
                             )
                             .toList();
 
             /*
-             * 삭제 대상 파일은 S3에서도 제거
+             * 중요:
+             *
+             * 여기서 S3를 바로 삭제하면 안 된다.
+             *
+             * DB에서는 먼저 NoticeFile을 삭제하고,
+             * DB COMMIT이 성공한 이후 S3 파일을 삭제한다.
              */
-            for (NoticeFile file : filesToDelete) {
+            List<String> urlsToDelete =
+                    filesToDelete.stream()
+                            .map(
+                                    NoticeFile::getFileUrl
+                            )
+                            .toList();
 
-                s3Service.deleteByUrlIfManaged(
-                        file.getFileUrl()
+            if (!filesToDelete.isEmpty()) {
+
+                noticeFileRepository.deleteAll(
+                        filesToDelete
+                );
+
+                deleteS3FilesAfterCommit(
+                        urlsToDelete
                 );
             }
-
-            noticeFileRepository.deleteAll(
-                    filesToDelete
-            );
         }
 
         /*
-         * 새 첨부파일 추가
+         * 신규 첨부파일 업로드.
+         *
+         * DB rollback 시 신규 S3 파일도 삭제된다.
          */
         uploadFiles(
                 notice,
                 newFiles
         );
 
-        List<NoticeFileResponse> responseFiles =
+        List<NoticeFileResponse> resultFiles =
                 noticeFileRepository
                         .findAllByNoticeId(
                                 noticeId
                         )
                         .stream()
-                        .map(
-                                NoticeFileResponse::from
+                        .map(file ->
+                                new NoticeFileResponse(
+                                        file.getId(),
+                                        file.getFileName(),
+                                        file.getFileUrl()
+                                )
                         )
                         .toList();
 
@@ -425,29 +424,26 @@ public class NoticeService {
                 notice.getId(),
                 notice.getTitle(),
                 notice.getContent(),
-                responseFiles,
-                notice.getUpdatedAt()
+                resultFiles,
+                Instant.now()
         );
     }
 
-    /**
-     * NOT-005
-     * 공지 삭제
-     */
+    // NOT-005
     @Transactional
     public void deleteNotice(
             UUID noticeId,
             User currentUser
     ) {
-
         SpaceNotice notice =
                 getNoticeEntity(
                         noticeId
                 );
 
         requireNoticeManager(
-                notice.getSpace().getId(),
-                currentUser.getId()
+                notice.getSpace()
+                        .getId(),
+                currentUser
         );
 
         List<NoticeFile> files =
@@ -457,17 +453,20 @@ public class NoticeService {
                         );
 
         /*
-         * 첨부파일 S3 삭제
+         * DB commit 이후 S3 삭제를 위해
+         * URL만 먼저 확보한다.
          */
-        for (NoticeFile file : files) {
-
-            s3Service.deleteByUrlIfManaged(
-                    file.getFileUrl()
-            );
-        }
+        List<String> fileUrls =
+                files.stream()
+                        .map(
+                                NoticeFile::getFileUrl
+                        )
+                        .toList();
 
         /*
-         * FK 관계 데이터 정리
+         * S3를 먼저 지우지 않는다.
+         *
+         * DB 데이터부터 삭제.
          */
         noticeReadRepository
                 .deleteAllByNoticeId(
@@ -479,33 +478,41 @@ public class NoticeService {
                         noticeId
                 );
 
-        spaceNoticeRepository.delete(
+        noticeRepository.delete(
                 notice
+        );
+
+        /*
+         * 위 DB 트랜잭션이 정상 commit된 경우에만
+         * S3 파일을 실제 삭제한다.
+         */
+        deleteS3FilesAfterCommit(
+                fileUrls
         );
     }
 
     /**
-     * 공지 첨부파일 업로드
+     * 신규 첨부파일 업로드
+     *
+     * 신규 파일은 S3에 먼저 생성될 수밖에 있으므로,
+     * 이후 DB 작업이 실패해 rollback될 경우
+     * 해당 S3 객체를 정리한다.
      */
     private void uploadFiles(
             SpaceNotice notice,
             List<MultipartFile> files
     ) {
-
-        if (files == null || files.isEmpty()) {
+        if (files == null
+                || files.isEmpty()) {
             return;
         }
 
-        /*
-         * Swagger에서 Send empty value가 체크된 경우
-         * 빈 MultipartFile이 넘어올 수 있으므로 제거한다.
-         */
         List<MultipartFile> validFiles =
                 files.stream()
-                        .filter(
-                                file ->
-                                        file != null
-                                                && !file.isEmpty()
+                        .filter(file ->
+                                file != null
+                                        && !file.isEmpty()
+                                        && file.getSize() > 0
                         )
                         .toList();
 
@@ -513,41 +520,37 @@ public class NoticeService {
             return;
         }
 
-        List<S3UploadResult> uploadedFiles =
+        List<S3UploadResult> uploaded =
                 s3Service.uploadAll(
                         validFiles,
                         "notices",
                         FileUploadType.NOTICE_ATTACHMENT
                 );
 
+        /*
+         * S3 업로드 성공 이후 DB rollback 시
+         * 신규 S3 객체 제거.
+         */
+        deleteUploadedFilesAfterRollback(
+                uploaded
+        );
+
         for (int i = 0;
-             i < uploadedFiles.size();
+             i < uploaded.size();
              i++) {
 
             MultipartFile multipartFile =
                     validFiles.get(i);
 
-            S3UploadResult uploadedFile =
-                    uploadedFiles.get(i);
-
-            String originalName =
-                    multipartFile
-                            .getOriginalFilename();
-
-            /*
-             * 파일명이 없는 경우 기본값 지정
-             */
-            if (originalName == null
-                    || originalName.isBlank()) {
-
-                originalName = "file";
-            }
+            S3UploadResult result =
+                    uploaded.get(i);
 
             NoticeFile noticeFile =
                     NoticeFile.create(
                             notice,
-                            originalName,
-                            uploadedFile.url()
+                            multipartFile
+                                    .getOriginalFilename(),
+                            result.url()
                     );
 
             noticeFileRepository.save(
@@ -557,67 +560,153 @@ public class NoticeService {
     }
 
     /**
-     * 공지 조회
+     * DB commit 성공 이후에만
+     * 기존 S3 파일 삭제.
      */
+    private void deleteS3FilesAfterCommit(
+            List<String> fileUrls
+    ) {
+        if (fileUrls == null
+                || fileUrls.isEmpty()) {
+            return;
+        }
+
+        List<String> urls =
+                List.copyOf(
+                        fileUrls
+                );
+
+        TransactionSynchronizationManager
+                .registerSynchronization(
+                        new TransactionSynchronization() {
+
+                            @Override
+                            public void afterCommit() {
+
+                                for (String fileUrl : urls) {
+
+                                    try {
+
+                                        s3Service.delete(
+                                                fileUrl
+                                        );
+
+                                    } catch (Exception ignored) {
+
+                                        /*
+                                         * 이미 DB commit이 완료된 시점.
+                                         *
+                                         * 여기서 예외를 다시 던져도
+                                         * DB rollback은 불가능하므로
+                                         * 요청을 실패시키지 않는다.
+                                         *
+                                         * 추후 Logger + 재시도 처리 가능.
+                                         */
+                                    }
+                                }
+                            }
+                        }
+                );
+    }
+
+    /**
+     * 신규 S3 파일 업로드 이후
+     * DB 트랜잭션이 rollback된 경우
+     * 신규 S3 객체 삭제.
+     */
+    private void deleteUploadedFilesAfterRollback(
+            List<S3UploadResult> uploadedFiles
+    ) {
+        if (uploadedFiles == null
+                || uploadedFiles.isEmpty()) {
+            return;
+        }
+
+        List<S3UploadResult> uploaded =
+                List.copyOf(
+                        uploadedFiles
+                );
+
+        TransactionSynchronizationManager
+                .registerSynchronization(
+                        new TransactionSynchronization() {
+
+                            @Override
+                            public void afterCompletion(
+                                    int status
+                            ) {
+                                if (status
+                                        != TransactionSynchronization
+                                        .STATUS_ROLLED_BACK) {
+
+                                    return;
+                                }
+
+                                for (S3UploadResult result :
+                                        uploaded) {
+
+                                    try {
+
+                                        s3Service.delete(
+                                                result.url()
+                                        );
+
+                                    } catch (Exception ignored) {
+
+                                        /*
+                                         * DB rollback은 이미 완료됨.
+                                         *
+                                         * S3 정리 실패는 별도로
+                                         * 로그/재시도 대상으로 관리 가능.
+                                         */
+                                    }
+                                }
+                            }
+                        }
+                );
+    }
+
     private SpaceNotice getNoticeEntity(
             UUID noticeId
     ) {
-
-        return spaceNoticeRepository
+        return noticeRepository
                 .findById(
                         noticeId
                 )
-                .orElseThrow(
-                        () ->
-                                new BusinessException(
-                                        NoticeErrorCode.NOTICE_NOT_FOUND
-                                )
+                .orElseThrow(() ->
+                        new BusinessException(
+                                NoticeErrorCode
+                                        .NOTICE_NOT_FOUND
+                        )
                 );
     }
 
-    /**
-     * Space 참여자 검증
-     */
     private SpaceMember requireApprovedMember(
             UUID spaceId,
-            UUID userId
+            User currentUser
     ) {
-
         return spaceMemberRepository
                 .findBySpaceIdAndUserIdAndStatusAndRemovedAtIsNull(
                         spaceId,
-                        userId,
+                        currentUser.getId(),
                         SpaceMemberStatus.APPROVED
                 )
-                .orElseThrow(
-                        () ->
-                                new BusinessException(
-                                        SpaceMemberErrorCode.SPACE_ACCESS_DENIED
-                                )
+                .orElseThrow(() ->
+                        new BusinessException(
+                                SpaceMemberErrorCode
+                                        .SPACE_ACCESS_DENIED
+                        )
                 );
     }
 
-    /**
-     * 공지 관리 권한 검증
-     *
-     * PROFESSOR
-     * → 허용
-     *
-     * ASSISTANT + NOTICE_MANAGE
-     * → 허용
-     *
-     * 나머지
-     * → 거부
-     */
     private SpaceMember requireNoticeManager(
             UUID spaceId,
-            UUID userId
+            User currentUser
     ) {
-
         SpaceMember member =
                 requireApprovedMember(
                         spaceId,
-                        userId
+                        currentUser
                 );
 
         if (member.getRole()
@@ -629,26 +718,23 @@ public class NoticeService {
         if (member.getRole()
                 == SpaceMemberRole.ASSISTANT
                 && permissionRepository
-                        .existsBySpaceMemberIdAndPermission(
-                                member.getId(),
-                                PermissionType.NOTICE_MANAGE
-                        )) {
+                .existsBySpaceMemberIdAndPermissionType(
+                        member.getId(),
+                        PermissionType.NOTICE_MANAGE
+                )) {
 
             return member;
         }
 
         throw new BusinessException(
-                NoticeErrorCode.NOTICE_MANAGE_FORBIDDEN
+                SpaceMemberErrorCode
+                        .SPACE_ACCESS_DENIED
         );
     }
 
-    /**
-     * size 보정
-     */
     private int normalizeSize(
             int size
     ) {
-
         if (size <= 0) {
             return DEFAULT_SIZE;
         }
@@ -659,13 +745,9 @@ public class NoticeService {
         );
     }
 
-    /**
-     * 공지 목록용 본문 미리보기
-     */
     private String preview(
             String content
     ) {
-
         String normalized =
                 content
                         .replaceAll(
@@ -686,11 +768,8 @@ public class NoticeService {
         ) + "...";
     }
 
-    /**
-     * Cursor 내부 데이터
-     */
-    public record NoticeCursor(
-            java.time.Instant createdAt,
+    private record NoticeCursor(
+            Instant createdAt,
             UUID id
     ) {
     }
