@@ -78,6 +78,12 @@ public enum SpaceErrorCode implements ErrorCode {
             "수업 시작 시간은 종료 시간보다 빨라야 합니다."
     ),
 
+    DUPLICATE_SCHEDULE(
+            HttpStatus.CONFLICT,
+            "SPACE_DUPLICATE_SCHEDULE",
+            "같은 요일에 겹치는 수업 시간을 등록할 수 없습니다."
+    ),
+
     INVALID_SPACE_NAME(
             HttpStatus.BAD_REQUEST,
             "SPACE_INVALID_NAME",
@@ -88,6 +94,12 @@ public enum SpaceErrorCode implements ErrorCode {
             HttpStatus.BAD_REQUEST,
             "SPACE_INVALID_FILTER",
             "Space 조회 조건이 올바르지 않습니다."
+    ),
+
+    SPACE_CREATION_OUTSIDE_SEMESTER(
+            HttpStatus.BAD_REQUEST,
+            "SPACE_CREATION_OUTSIDE_SEMESTER",
+            "Space는 1학기(3~6월) 또는 2학기(9~12월)에 생성할 수 있습니다."
     ),
 
     UNAUTHENTICATED(
