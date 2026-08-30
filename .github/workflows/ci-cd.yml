@@ -83,10 +83,25 @@ jobs:
             sudo systemctl restart tikitaka
 
             echo "Waiting for application..."
-            sleep 15
 
-            curl --fail http://localhost:8080/actuator/health
+            for i in {1..12}; do
+              if curl --fail --silent http://localhost:8080/actuator/health; then
+                echo
+                echo "Application is healthy."
 
-            rm -rf /tmp/tikitaka-deploy
+                rm -rf /tmp/tikitaka-deploy
 
-            echo "Deployment successful."
+                echo "Deployment successful."
+                exit 0
+              fi
+
+              echo "Application not ready yet... ($i/12)"
+              sleep 5
+            done
+
+            echo "Application failed to become healthy."
+
+            sudo systemctl status tikitaka --no-pager
+            sudo journalctl -u tikitaka -n 50 --no-pager
+
+            exit 1
