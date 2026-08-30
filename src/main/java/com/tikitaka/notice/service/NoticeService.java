@@ -272,10 +272,10 @@ public class NoticeService {
         );
 
         /*
-         * 신규 S3 업로드.
+         * 신규 파일 업로드.
          *
-         * 이후 DB 트랜잭션이 rollback되면
-         * 업로드된 S3 파일도 삭제하도록 등록한다.
+         * DB 트랜잭션이 rollback되면
+         * 신규 S3 파일도 삭제한다.
          */
         uploadFiles(
                 notice,
@@ -325,8 +325,11 @@ public class NoticeService {
                 request.retainedFileIds();
 
         /*
-         * retained_file_ids가 null이면
-         * 기존 파일 전체 유지.
+         * null이면 기존 첨부파일 전체 유지.
+         *
+         * 빈 배열이면 전체 삭제.
+         *
+         * 일부 ID면 전달받은 파일만 유지.
          */
         if (retainedFileIds != null) {
 
@@ -335,10 +338,6 @@ public class NoticeService {
                             retainedFileIds
                     );
 
-            /*
-             * retained_file_ids에 다른 공지의 파일 ID가
-             * 들어오는 것을 방지한다.
-             */
             Set<UUID> existingFileIds =
                     existingFiles.stream()
                             .map(
@@ -348,6 +347,9 @@ public class NoticeService {
                                     java.util.stream.Collectors.toSet()
                             );
 
+            /*
+             * 다른 공지사항의 파일 ID가 들어오면 차단.
+             */
             if (!existingFileIds
                     .containsAll(
                             retainedSet
@@ -369,12 +371,8 @@ public class NoticeService {
                             .toList();
 
             /*
-             * 중요:
-             *
-             * 여기서 S3를 바로 삭제하면 안 된다.
-             *
-             * DB에서는 먼저 NoticeFile을 삭제하고,
-             * DB COMMIT이 성공한 이후 S3 파일을 삭제한다.
+             * DB commit 이후 S3에서 삭제하기 위해
+             * URL만 미리 보관한다.
              */
             List<String> urlsToDelete =
                     filesToDelete.stream()
@@ -385,10 +383,16 @@ public class NoticeService {
 
             if (!filesToDelete.isEmpty()) {
 
+                /*
+                 * DB 데이터는 현재 트랜잭션 안에서 먼저 삭제.
+                 */
                 noticeFileRepository.deleteAll(
                         filesToDelete
                 );
 
+                /*
+                 * 실제 S3 파일은 DB commit 성공 이후 삭제.
+                 */
                 deleteS3FilesAfterCommit(
                         urlsToDelete
                 );
@@ -396,9 +400,9 @@ public class NoticeService {
         }
 
         /*
-         * 신규 첨부파일 업로드.
+         * 신규 파일 업로드.
          *
-         * DB rollback 시 신규 S3 파일도 삭제된다.
+         * 이후 DB rollback 시 신규 S3 파일은 정리된다.
          */
         uploadFiles(
                 notice,
@@ -453,8 +457,7 @@ public class NoticeService {
                         );
 
         /*
-         * DB commit 이후 S3 삭제를 위해
-         * URL만 먼저 확보한다.
+         * commit 이후 삭제할 S3 URL 확보.
          */
         List<String> fileUrls =
                 files.stream()
@@ -464,9 +467,9 @@ public class NoticeService {
                         .toList();
 
         /*
-         * S3를 먼저 지우지 않는다.
+         * S3를 먼저 삭제하지 않는다.
          *
-         * DB 데이터부터 삭제.
+         * DB 데이터부터 삭제한다.
          */
         noticeReadRepository
                 .deleteAllByNoticeId(
@@ -483,8 +486,8 @@ public class NoticeService {
         );
 
         /*
-         * 위 DB 트랜잭션이 정상 commit된 경우에만
-         * S3 파일을 실제 삭제한다.
+         * DB commit 성공 후에만
+         * 실제 S3 객체 삭제.
          */
         deleteS3FilesAfterCommit(
                 fileUrls
@@ -493,10 +496,6 @@ public class NoticeService {
 
     /**
      * 신규 첨부파일 업로드
-     *
-     * 신규 파일은 S3에 먼저 생성될 수밖에 있으므로,
-     * 이후 DB 작업이 실패해 rollback될 경우
-     * 해당 S3 객체를 정리한다.
      */
     private void uploadFiles(
             SpaceNotice notice,
@@ -504,6 +503,7 @@ public class NoticeService {
     ) {
         if (files == null
                 || files.isEmpty()) {
+
             return;
         }
 
@@ -528,8 +528,8 @@ public class NoticeService {
                 );
 
         /*
-         * S3 업로드 성공 이후 DB rollback 시
-         * 신규 S3 객체 제거.
+         * S3에는 올라갔는데 이후 DB 작업이 실패하면
+         * 신규 업로드 파일을 제거한다.
          */
         deleteUploadedFilesAfterRollback(
                 uploaded
@@ -560,14 +560,14 @@ public class NoticeService {
     }
 
     /**
-     * DB commit 성공 이후에만
-     * 기존 S3 파일 삭제.
+     * DB COMMIT 성공 후 기존 S3 파일 삭제.
      */
     private void deleteS3FilesAfterCommit(
             List<String> fileUrls
     ) {
         if (fileUrls == null
                 || fileUrls.isEmpty()) {
+
             return;
         }
 
@@ -594,13 +594,10 @@ public class NoticeService {
                                     } catch (Exception ignored) {
 
                                         /*
-                                         * 이미 DB commit이 완료된 시점.
+                                         * DB commit 완료 후이므로
+                                         * S3 삭제 실패로 DB를 rollback할 수 없다.
                                          *
-                                         * 여기서 예외를 다시 던져도
-                                         * DB rollback은 불가능하므로
-                                         * 요청을 실패시키지 않는다.
-                                         *
-                                         * 추후 Logger + 재시도 처리 가능.
+                                         * 추후 로그 / 재시도 처리 가능.
                                          */
                                     }
                                 }
@@ -610,15 +607,14 @@ public class NoticeService {
     }
 
     /**
-     * 신규 S3 파일 업로드 이후
-     * DB 트랜잭션이 rollback된 경우
-     * 신규 S3 객체 삭제.
+     * DB rollback 시 신규 업로드 S3 파일 제거.
      */
     private void deleteUploadedFilesAfterRollback(
             List<S3UploadResult> uploadedFiles
     ) {
         if (uploadedFiles == null
                 || uploadedFiles.isEmpty()) {
+
             return;
         }
 
@@ -654,10 +650,8 @@ public class NoticeService {
                                     } catch (Exception ignored) {
 
                                         /*
-                                         * DB rollback은 이미 완료됨.
-                                         *
-                                         * S3 정리 실패는 별도로
-                                         * 로그/재시도 대상으로 관리 가능.
+                                         * DB rollback은 이미 완료된 상태.
+                                         * S3 삭제 실패는 별도 재시도 대상.
                                          */
                                     }
                                 }
@@ -709,16 +703,27 @@ public class NoticeService {
                         currentUser
                 );
 
+        /*
+         * 교수는 공지 관리 가능.
+         */
         if (member.getRole()
                 == SpaceMemberRole.PROFESSOR) {
 
             return member;
         }
 
+        /*
+         * 조교는 NOTICE_MANAGE 권한이 있을 때만 가능.
+         *
+         * 실제 SpaceMemberPermissionRepository에서
+         * 사용하는 메서드명:
+         *
+         * existsBySpaceMemberIdAndPermission
+         */
         if (member.getRole()
                 == SpaceMemberRole.ASSISTANT
                 && permissionRepository
-                .existsBySpaceMemberIdAndPermissionType(
+                .existsBySpaceMemberIdAndPermission(
                         member.getId(),
                         PermissionType.NOTICE_MANAGE
                 )) {
