@@ -60,18 +60,6 @@ public enum SpaceErrorCode implements ErrorCode {
             "이미 활성 상태인 Space입니다."
     ),
 
-    ARCHIVED_SPACE_CANNOT_BE_MODIFIED(
-            HttpStatus.CONFLICT,
-            "SPACE_ARCHIVED_CANNOT_MODIFY",
-            "보관된 Space는 수정할 수 없습니다."
-    ),
-
-    ACTIVE_SPACE_CANNOT_BE_DELETED(
-            HttpStatus.CONFLICT,
-            "SPACE_ACTIVE_CANNOT_DELETE",
-            "활성 상태의 Space는 삭제할 수 없습니다. 먼저 Space를 보관해주세요."
-    ),
-
     INVALID_SCHEDULE(
             HttpStatus.BAD_REQUEST,
             "SPACE_INVALID_SCHEDULE",
@@ -79,7 +67,7 @@ public enum SpaceErrorCode implements ErrorCode {
     ),
 
     DUPLICATE_SCHEDULE(
-            HttpStatus.BAD_REQUEST,
+            HttpStatus.CONFLICT,
             "SPACE_DUPLICATE_SCHEDULE",
             "같은 요일에 겹치는 수업 시간을 등록할 수 없습니다."
     ),
@@ -94,6 +82,12 @@ public enum SpaceErrorCode implements ErrorCode {
             HttpStatus.BAD_REQUEST,
             "SPACE_INVALID_FILTER",
             "Space 조회 조건이 올바르지 않습니다."
+    ),
+
+    SPACE_CREATION_OUTSIDE_SEMESTER(
+            HttpStatus.BAD_REQUEST,
+            "SPACE_CREATION_OUTSIDE_SEMESTER",
+            "Space는 1학기(3~6월) 또는 2학기(9~12월)에 생성할 수 있습니다."
     ),
 
     UNAUTHENTICATED(

@@ -66,8 +66,21 @@ public class SpaceService {
     ) {
         requireProfessorAccount(currentUser);
 
+        /*
+         * 요청 내부 시간 검증
+         */
         validateSchedules(
                 request.schedules()
+        );
+
+        /*
+         * 현재 교수가 이미 가지고 있는
+         * 다른 활성 Space 수업과 시간 충돌 검증
+         */
+        validateProfessorScheduleConflict(
+                currentUser.getId(),
+                request.schedules(),
+                null
         );
 
         ZonedDateTime nowKst =
@@ -300,7 +313,6 @@ public class SpaceService {
             );
         }
 
-        // 현재 승인된 멤버인지 확인
         spaceMemberRepository
                 .findBySpaceIdAndUserIdAndStatusAndRemovedAtIsNull(
                         space.getId(),
@@ -313,7 +325,6 @@ public class SpaceService {
                     );
                 });
 
-        // 현재 가입 승인 대기 중인지 확인
         spaceMemberRepository
                 .findBySpaceIdAndUserIdAndStatusAndRemovedAtIsNull(
                         space.getId(),
@@ -335,10 +346,6 @@ public class SpaceService {
                         currentUser.getId()
                 );
 
-        /*
-         * 과거에 내보내진 멤버가 있으면
-         * 새 row를 만들지 않고 기존 row를 다시 활성화한다.
-         */
         SpaceMember member =
                 spaceMemberRepository
                         .findFirstBySpaceIdAndUserIdAndRemovedAtIsNotNullOrderByRemovedAtDesc(
@@ -356,7 +363,6 @@ public class SpaceService {
                             return removedMember;
                         })
                         .orElseGet(() ->
-
                                 SpaceMember.student(
                                         space,
                                         currentUser,
@@ -405,8 +411,23 @@ public class SpaceService {
         }
 
         if (request.schedules() != null) {
+
+            /*
+             * 새로 전달된 시간표 내부 충돌 검사
+             */
             validateSchedules(
                     request.schedules()
+            );
+
+            /*
+             * 다른 활성 Space와 충돌 검사
+             *
+             * 현재 수정 중인 Space의 기존 시간표는 제외
+             */
+            validateProfessorScheduleConflict(
+                    currentUser.getId(),
+                    request.schedules(),
+                    spaceId
             );
         }
 
@@ -624,21 +645,21 @@ public class SpaceService {
     }
 
     /**
-     * Space 수업 시간 검증
+     * 전달받은 시간표 자체 검증
      *
-     * 1. 시작 시간은 종료 시간보다 빨라야 한다.
-     * 2. 같은 요일에 서로 겹치는 시간대를 등록할 수 없다.
-     * 3. 한 수업의 종료 시간과 다음 수업의 시작 시간이 같은 것은 허용한다.
+     * 1. 시작 시간 < 종료 시간
+     * 2. 요청 내부에서 같은 요일 시간 중복 금지
      */
     private void validateSchedules(
             List<ScheduleRequest> schedules
     ) {
-        if (schedules == null || schedules.isEmpty()) {
+        if (schedules == null
+                || schedules.isEmpty()) {
             return;
         }
 
         /*
-         * 시작/종료 시간 검증
+         * 시작 시간 / 종료 시간 검증
          */
         for (ScheduleRequest schedule : schedules) {
 
@@ -654,13 +675,7 @@ public class SpaceService {
         }
 
         /*
-         * 같은 요일의 수업 시간 중복 검증
-         *
-         * A.start < B.end
-         * &&
-         * B.start < A.end
-         *
-         * 위 두 조건이 모두 참이면 두 시간대가 겹친다.
+         * 같은 요청 내부의 시간 중복 검사
          */
         for (int i = 0;
              i < schedules.size();
@@ -677,7 +692,7 @@ public class SpaceService {
                         schedules.get(j);
 
                 /*
-                 * 요일이 다르면 시간대가 같아도 허용
+                 * 다른 요일이면 허용
                  */
                 if (current.day()
                         != other.day()) {
@@ -694,6 +709,88 @@ public class SpaceService {
                         other.startTime()
                                 .isBefore(
                                         current.endTime()
+                                );
+
+                if (overlaps) {
+                    throw new BusinessException(
+                            SpaceErrorCode.DUPLICATE_SCHEDULE
+                    );
+                }
+            }
+        }
+    }
+
+    /**
+     * 해당 교수가 이미 가지고 있는 활성 Space의 수업들과
+     * 새로 등록하려는 수업의 시간 중복 검사
+     */
+    private void validateProfessorScheduleConflict(
+            UUID professorId,
+            List<ScheduleRequest> newSchedules,
+            UUID excludeSpaceId
+    ) {
+        if (newSchedules == null
+                || newSchedules.isEmpty()) {
+            return;
+        }
+
+        List<Schedule> existingSchedules =
+                scheduleRepository
+                        .findAllBySpaceProfessorIdAndSpaceActiveStatusTrue(
+                                professorId
+                        );
+
+        for (ScheduleRequest newSchedule : newSchedules) {
+
+            for (Schedule existing : existingSchedules) {
+
+                /*
+                 * Space 수정 시
+                 * 수정 대상 Space 자기 자신의 기존 일정은 제외
+                 */
+                if (excludeSpaceId != null
+                        && existing.getSpace()
+                                .getId()
+                                .equals(excludeSpaceId)) {
+
+                    continue;
+                }
+
+                /*
+                 * 요일이 다르면 충돌 아님
+                 */
+                if (newSchedule.day()
+                        != existing.getDay()) {
+
+                    continue;
+                }
+
+                /*
+                 * 시간 중복 조건
+                 *
+                 * 새 시작 < 기존 종료
+                 * &&
+                 * 기존 시작 < 새 종료
+                 *
+                 * 예:
+                 *
+                 * 기존 10:30 ~ 12:00
+                 * 신규 11:00 ~ 13:00
+                 * -> 중복
+                 *
+                 * 기존 10:30 ~ 12:00
+                 * 신규 12:00 ~ 14:00
+                 * -> 허용
+                 */
+                boolean overlaps =
+                        newSchedule.startTime()
+                                .isBefore(
+                                        existing.getEndTime()
+                                )
+                        &&
+                        existing.getStartTime()
+                                .isBefore(
+                                        newSchedule.endTime()
                                 );
 
                 if (overlaps) {
