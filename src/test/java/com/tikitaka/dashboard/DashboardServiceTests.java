@@ -34,7 +34,7 @@ class DashboardServiceTests {
     void groupsAndSortsTimetableBySpace() {
         UUID userId = UUID.randomUUID();
         UUID spaceId = UUID.randomUUID();
-        when(timetableRepository.findTimetable(userId, 2026, "2")).thenReturn(List.of(
+        when(timetableRepository.findTimetable(userId)).thenReturn(List.of(
                 new DashboardTimetableRow(
                         spaceId, "운영체제", "SW101", DayOfWeek.WEDNESDAY,
                         LocalTime.of(13, 0), LocalTime.of(14, 30)
@@ -46,22 +46,22 @@ class DashboardServiceTests {
         ));
 
         List<DashboardTimetableItem> response =
-                dashboardService.getTimetable(userId, 2026, "2");
+                dashboardService.getTimetable(userId);
 
         assertThat(response).hasSize(1);
         assertThat(response.get(0).spaceId()).isEqualTo(spaceId);
         assertThat(response.get(0).schedules())
                 .extracting(item -> item.day())
                 .containsExactly(DayOfWeek.MONDAY, DayOfWeek.WEDNESDAY);
-        verify(timetableRepository).findTimetable(userId, 2026, "2");
+        verify(timetableRepository).findTimetable(userId);
     }
 
     @Test
     void returnsEmptyTimetableWhenNoScheduleExists() {
         UUID userId = UUID.randomUUID();
-        when(timetableRepository.findTimetable(userId, 2026, "1")).thenReturn(List.of());
+        when(timetableRepository.findTimetable(userId)).thenReturn(List.of());
 
-        assertThat(dashboardService.getTimetable(userId, 2026, "1")).isEmpty();
+        assertThat(dashboardService.getTimetable(userId)).isEmpty();
     }
 
     @Test

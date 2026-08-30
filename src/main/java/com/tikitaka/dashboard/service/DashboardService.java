@@ -27,13 +27,9 @@ public class DashboardService {
     private final DashboardAssignmentRepository dashboardAssignmentRepository;
     private final DashboardTimetableRepository dashboardTimetableRepository;
 
-    public List<DashboardTimetableItem> getTimetable(
-            UUID userId,
-            int year,
-            String semester
-    ) {
+    public List<DashboardTimetableItem> getTimetable(UUID userId) {
         Map<SpaceKey, List<DashboardTimetableRow>> rowsBySpace =
-                dashboardTimetableRepository.findTimetable(userId, year, semester)
+                dashboardTimetableRepository.findTimetable(userId)
                         .stream()
                         .collect(Collectors.groupingBy(
                                 row -> new SpaceKey(row.spaceId(), row.spaceName()),
