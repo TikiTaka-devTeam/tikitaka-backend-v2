@@ -283,8 +283,6 @@ public class SpaceService {
                             member.getColorKey(),
                             member.getStatus(),
                             member.getRequestedAt()
-                                    .atZone(KST)
-                                    .toOffsetDateTime()
                     );
                 })
                 .toList();

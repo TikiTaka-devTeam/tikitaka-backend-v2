@@ -1,6 +1,6 @@
 package com.tikitaka.space.dto.response;
 
-import java.time.OffsetDateTime;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -41,6 +41,6 @@ public record PendingSpaceResponse(
         SpaceMemberStatus status,
 
         @JsonProperty("requested_at")
-        OffsetDateTime requestedAt
+        Instant requestedAt
 ) {
 }
