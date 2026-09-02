@@ -1,6 +1,6 @@
 package com.tikitaka.space.dto.response;
 
-import java.time.Instant;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -22,6 +22,12 @@ public record PendingSpaceResponse(
         @JsonProperty("professor_name")
         String professorName,
 
+        @JsonProperty("year")
+        Integer year,
+
+        @JsonProperty("semester")
+        String semester,
+
         @JsonProperty("classroom")
         String classroom,
 
@@ -35,6 +41,6 @@ public record PendingSpaceResponse(
         SpaceMemberStatus status,
 
         @JsonProperty("requested_at")
-        Instant requestedAt
+        OffsetDateTime requestedAt
 ) {
 }
