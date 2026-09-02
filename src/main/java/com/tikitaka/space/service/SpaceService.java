@@ -276,6 +276,8 @@ public class SpaceService {
                             space.getId(),
                             space.getSpaceName(),
                             space.getProfessor().getName(),
+                            space.getYear(),
+                            space.getSemester(),
                             space.getClassroom(),
                             schedules,
                             member.getColorKey(),
@@ -820,10 +822,21 @@ public class SpaceService {
                 space.getSpaceName(),
                 space.getYear(),
                 space.getSemester(),
+                space.getClassroom(),
+                getScheduleResponses(space.getId()),
                 member.getColorKey(),
                 spaceCode,
                 status
         );
+    }
+
+    private List<ScheduleResponse> getScheduleResponses(UUID spaceId) {
+        return scheduleRepository
+                .findAllBySpaceId(spaceId)
+                .stream()
+                .sorted(scheduleComparator())
+                .map(ScheduleResponse::from)
+                .toList();
     }
 
     private SpaceColorKey nextColorKey(

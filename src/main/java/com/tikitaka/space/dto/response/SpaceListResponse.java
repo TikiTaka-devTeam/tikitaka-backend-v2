@@ -1,5 +1,6 @@
 package com.tikitaka.space.dto.response;
 
+import java.util.List;
 import java.util.UUID;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
@@ -25,6 +26,13 @@ public record SpaceListResponse(
         @JsonProperty("semester")
         @Schema(example = "2")
         String semester,
+
+        @JsonProperty("classroom")
+        @Schema(example = "SW101")
+        String classroom,
+
+        @JsonProperty("schedules")
+        List<ScheduleResponse> schedules,
 
         @JsonProperty("color_key")
         @Schema(example = "COLOR_1")
