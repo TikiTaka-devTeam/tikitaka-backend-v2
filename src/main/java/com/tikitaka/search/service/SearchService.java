@@ -2,7 +2,7 @@ package com.tikitaka.search.service;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.time.OffsetDateTime;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -14,11 +14,11 @@ import org.springframework.jdbc.core.RowCallbackHandler;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.tikitaka.search.dto.SearchAnnouncementResponse;
-import com.tikitaka.search.dto.SearchCategoryResponse;
-import com.tikitaka.search.dto.SearchDocumentResponse;
-import com.tikitaka.search.dto.SearchQuestionResponse;
-import com.tikitaka.search.dto.SearchResponse;
+import com.tikitaka.search.dto.response.SearchAnnouncementResponse;
+import com.tikitaka.search.dto.response.SearchCategoryResponse;
+import com.tikitaka.search.dto.response.SearchDocumentResponse;
+import com.tikitaka.search.dto.response.SearchQuestionResponse;
+import com.tikitaka.search.dto.response.SearchResponse;
 
 @Service
 public class SearchService {
@@ -152,21 +152,21 @@ public class SearchService {
         return new SearchDocumentResponse(
                 rs.getObject("id", UUID.class), rs.getObject("space_id", UUID.class),
                 rs.getString("space_name"), rs.getString("title"), rs.getString("thumbnail_url"),
-                rs.getObject("created_at", OffsetDateTime.class));
+                rs.getTimestamp("created_at").toInstant());
     }
 
     private SearchAnnouncementResponse mapAnnouncement(ResultSet rs, int rowNum) throws SQLException {
         return new SearchAnnouncementResponse(
                 rs.getObject("id", UUID.class), rs.getObject("space_id", UUID.class),
                 rs.getString("space_name"), rs.getString("title"), preview(rs.getString("content")),
-                rs.getObject("created_at", OffsetDateTime.class));
+                rs.getTimestamp("created_at").toInstant());
     }
 
     private QuestionRow mapQuestionRow(ResultSet rs, int rowNum) throws SQLException {
         return new QuestionRow(
                 rs.getObject("id", UUID.class), rs.getObject("space_id", UUID.class),
                 rs.getString("space_name"), rs.getString("title"), rs.getString("content"),
-                rs.getObject("created_at", OffsetDateTime.class));
+                rs.getTimestamp("created_at").toInstant());
     }
 
     private String preview(String content) {
@@ -178,6 +178,6 @@ public class SearchService {
 
     private record QuestionRow(
             UUID questionId, UUID spaceId, String spaceName, String title,
-            String content, OffsetDateTime createdAt) {
+            String content, Instant createdAt) {
     }
 }

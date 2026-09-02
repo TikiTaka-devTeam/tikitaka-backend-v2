@@ -1,6 +1,6 @@
-package com.tikitaka.search.dto;
+package com.tikitaka.search.dto.response;
 
-import java.time.OffsetDateTime;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -11,5 +11,5 @@ public record SearchQuestionResponse(
         String title,
         String contentPreview,
         List<SearchCategoryResponse> categories,
-        OffsetDateTime createdAt) {
+        Instant createdAt) {
 }

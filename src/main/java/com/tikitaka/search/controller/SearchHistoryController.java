@@ -10,9 +10,9 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.tikitaka.search.dto.RecentItemsResponse;
-import com.tikitaka.search.dto.RecentSearchResponse;
-import com.tikitaka.search.dto.SearchMessageResponse;
+import com.tikitaka.search.dto.response.RecentItemsResponse;
+import com.tikitaka.search.dto.response.RecentSearchResponse;
+import com.tikitaka.search.dto.response.SearchMessageResponse;
 import com.tikitaka.search.service.SearchHistoryService;
 
 import com.tikitaka.global.config.OpenApiConfig;

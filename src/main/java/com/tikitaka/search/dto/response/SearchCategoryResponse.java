@@ -1,4 +1,4 @@
-package com.tikitaka.search.dto;
+package com.tikitaka.search.dto.response;
 
 import java.util.UUID;
 

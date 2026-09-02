@@ -1,6 +1,6 @@
-package com.tikitaka.search.dto;
+package com.tikitaka.search.dto.response;
 
-import java.time.OffsetDateTime;
+import java.time.Instant;
 import java.util.UUID;
 
 public record SearchDocumentResponse(
@@ -9,5 +9,5 @@ public record SearchDocumentResponse(
         String spaceName,
         String title,
         String thumbnailUrl,
-        OffsetDateTime uploadedAt) {
+        Instant uploadedAt) {
 }

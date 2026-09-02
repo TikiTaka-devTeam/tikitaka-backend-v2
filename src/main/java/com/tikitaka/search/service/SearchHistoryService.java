@@ -7,10 +7,10 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.tikitaka.search.dto.RecentDocumentResponse;
-import com.tikitaka.search.dto.RecentItemsResponse;
-import com.tikitaka.search.dto.RecentQuestionResponse;
-import com.tikitaka.search.dto.RecentSearchResponse;
+import com.tikitaka.search.dto.response.RecentDocumentResponse;
+import com.tikitaka.search.dto.response.RecentItemsResponse;
+import com.tikitaka.search.dto.response.RecentQuestionResponse;
+import com.tikitaka.search.dto.response.RecentSearchResponse;
 
 @Service
 public class SearchHistoryService {
