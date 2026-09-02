@@ -22,6 +22,12 @@ public record PendingSpaceResponse(
         @JsonProperty("professor_name")
         String professorName,
 
+        @JsonProperty("year")
+        Integer year,
+
+        @JsonProperty("semester")
+        String semester,
+
         @JsonProperty("classroom")
         String classroom,
 
