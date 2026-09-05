@@ -35,11 +35,11 @@ public class Document extends BaseTimeEntity {
     @Column(nullable = false, length = 255)
     private String title;
 
-    @Column(name = "thumbnail_url", nullable = false, columnDefinition = "TEXT")
-    private String thumbnailUrl;
+    @Column(name = "thumbnail_key", nullable = false, columnDefinition = "TEXT")
+    private String thumbnailKey;
 
-    @Column(name = "pdf_url", nullable = false, columnDefinition = "TEXT")
-    private String pdfUrl;
+    @Column(name = "pdf_key", nullable = false, columnDefinition = "TEXT")
+    private String pdfKey;
 
     @Column(name = "page_count", nullable = false)
     private Integer pageCount;
@@ -50,14 +50,14 @@ public class Document extends BaseTimeEntity {
     private Document(
             Space space,
             String title,
-            String thumbnailUrl,
-            String pdfUrl,
+            String thumbnailKey,
+            String pdfKey,
             Integer pageCount
     ) {
         this.space = space;
         this.title = title;
-        this.thumbnailUrl = thumbnailUrl;
-        this.pdfUrl = pdfUrl;
+        this.thumbnailKey = thumbnailKey;
+        this.pdfKey = pdfKey;
         this.pageCount = pageCount;
         this.version = 1;
     }
@@ -65,26 +65,26 @@ public class Document extends BaseTimeEntity {
     public static Document create(
             Space space,
             String title,
-            String thumbnailUrl,
-            String pdfUrl,
+            String thumbnailKey,
+            String pdfKey,
             Integer pageCount
     ) {
         return new Document(
                 space,
                 title,
-                thumbnailUrl,
-                pdfUrl,
+                thumbnailKey,
+                pdfKey,
                 pageCount
         );
     }
 
     public void replace(
-            String thumbnailUrl,
-            String pdfUrl,
+            String thumbnailKey,
+            String pdfKey,
             Integer pageCount
     ) {
-        this.thumbnailUrl = thumbnailUrl;
-        this.pdfUrl = pdfUrl;
+        this.thumbnailKey = thumbnailKey;
+        this.pdfKey = pdfKey;
         this.pageCount = pageCount;
         this.version++;
     }

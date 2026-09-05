@@ -34,24 +34,24 @@ public class Slide extends BaseTimeEntity {
     @Column(name = "page_number", nullable = false)
     private Integer pageNumber;
 
-    @Column(name = "thumbnail_url", nullable = false, columnDefinition = "TEXT")
-    private String thumbnailUrl;
+    @Column(name = "thumbnail_key", nullable = false, columnDefinition = "TEXT")
+    private String thumbnailKey;
 
     private Slide(
             Document document,
             Integer pageNumber,
-            String thumbnailUrl
+            String thumbnailKey
     ) {
         this.document = document;
         this.pageNumber = pageNumber;
-        this.thumbnailUrl = thumbnailUrl;
+        this.thumbnailKey = thumbnailKey;
     }
 
     public static Slide create(
             Document document,
             Integer pageNumber,
-            String thumbnailUrl
+            String thumbnailKey
     ) {
-        return new Slide(document, pageNumber, thumbnailUrl);
+        return new Slide(document, pageNumber, thumbnailKey);
     }
 }

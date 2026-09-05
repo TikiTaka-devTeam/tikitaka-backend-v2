@@ -38,8 +38,8 @@ public class RevisionSlide {
     @Column(name = "source_page_number", nullable = false)
     private Integer sourcePageNumber;
 
-    @Column(name = "thumbnail_url", nullable = false, columnDefinition = "TEXT")
-    private String thumbnailUrl;
+    @Column(name = "thumbnail_key", nullable = false, columnDefinition = "TEXT")
+    private String thumbnailKey;
 
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
