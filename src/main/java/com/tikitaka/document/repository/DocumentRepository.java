@@ -9,5 +9,5 @@ import com.tikitaka.document.entity.Document;
 
 public interface DocumentRepository extends JpaRepository<Document, UUID> {
 
-    List<Document> findAllBySpaceIdOrderByCreatedAtDesc(UUID spaceId);
+    List<Document> findAllBySpaceIdOrderByCreatedAtDescIdDesc(UUID spaceId);
 }

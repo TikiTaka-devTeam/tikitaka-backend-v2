@@ -48,8 +48,8 @@ public class DocumentRevision extends BaseTimeEntity {
     @Column(name = "source_file_name", length = 255)
     private String sourceFileName;
 
-    @Column(name = "source_pdf_url", columnDefinition = "TEXT")
-    private String sourcePdfUrl;
+    @Column(name = "source_pdf_key", columnDefinition = "TEXT")
+    private String sourcePdfKey;
 
     @Column(name = "source_page_count")
     private Integer sourcePageCount;
@@ -81,11 +81,11 @@ public class DocumentRevision extends BaseTimeEntity {
 
     public void updateSourcePdf(
             String sourceFileName,
-            String sourcePdfUrl,
+            String sourcePdfKey,
             Integer sourcePageCount
     ) {
         this.sourceFileName = sourceFileName;
-        this.sourcePdfUrl = sourcePdfUrl;
+        this.sourcePdfKey = sourcePdfKey;
         this.sourcePageCount = sourcePageCount;
     }
 

@@ -48,6 +48,6 @@ public class RevisionPage extends BaseTimeEntity {
     @JoinColumn(name = "revision_slide_id")
     private RevisionSlide revisionSlide;
 
-    @Column(name = "thumbnail_url", nullable = false, columnDefinition = "TEXT")
-    private String thumbnailUrl;
+    @Column(name = "thumbnail_key", nullable = false, columnDefinition = "TEXT")
+    private String thumbnailKey;
 }
