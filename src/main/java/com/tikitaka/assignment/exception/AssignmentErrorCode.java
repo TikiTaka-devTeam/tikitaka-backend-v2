@@ -34,6 +34,30 @@ public enum AssignmentErrorCode implements ErrorCode {
             HttpStatus.FORBIDDEN,
             "ASSIGNMENT_MANAGE_FORBIDDEN",
             "과제 관리 권한이 없습니다."
+    ),
+
+    STUDENT_ONLY(
+            HttpStatus.FORBIDDEN,
+            "ASSIGNMENT_STUDENT_ONLY",
+            "학생만 과제를 제출할 수 있습니다."
+    ),
+
+    ASSIGNMENT_CLOSED(
+            HttpStatus.BAD_REQUEST,
+            "ASSIGNMENT_CLOSED",
+            "마감된 과제는 제출하거나 수정할 수 없습니다."
+    ),
+
+    SUBMISSION_ALREADY_EXISTS(
+            HttpStatus.CONFLICT,
+            "SUBMISSION_ALREADY_EXISTS",
+            "이미 제출한 과제입니다."
+    ),
+
+    SUBMISSION_NOT_FOUND(
+            HttpStatus.NOT_FOUND,
+            "SUBMISSION_NOT_FOUND",
+            "제출한 과제를 찾을 수 없습니다."
     );
 
     private final HttpStatus status;

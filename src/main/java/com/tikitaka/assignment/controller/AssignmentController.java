@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
@@ -21,6 +22,7 @@ import com.tikitaka.assignment.dto.response.AssignmentCreateResponse;
 import com.tikitaka.assignment.dto.response.AssignmentDeleteResponse;
 import com.tikitaka.assignment.dto.response.AssignmentDetailResponse;
 import com.tikitaka.assignment.dto.response.AssignmentListResponse;
+import com.tikitaka.assignment.dto.response.AssignmentSubmitResponse;
 import com.tikitaka.assignment.dto.response.AssignmentSummaryResponse;
 import com.tikitaka.assignment.dto.response.AssignmentUpdateResponse;
 import com.tikitaka.assignment.service.AssignmentService;
@@ -40,7 +42,7 @@ import lombok.RequiredArgsConstructor;
 
 @Tag(
         name = "Assignment",
-        description = "Assignment 생성/조회/수정/삭제 API"
+        description = "Assignment 생성/조회/수정/삭제/제출 API"
 )
 @RestController
 @RequiredArgsConstructor
@@ -210,20 +212,6 @@ public class AssignmentController {
             @RequestPart("assignment_data")
             AssignmentUpdateRequest assignmentData,
 
-            @Parameter(
-                    description =
-                            "새로 추가할 과제 첨부파일",
-                    content =
-                            @Content(
-                                    mediaType =
-                                            MediaType.APPLICATION_OCTET_STREAM_VALUE,
-                                    schema =
-                                            @Schema(
-                                                    type = "string",
-                                                    format = "binary"
-                                            )
-                            )
-            )
             @RequestPart(
                     value = "new_files",
                     required = false
@@ -283,6 +271,84 @@ public class AssignmentController {
 
         return assignmentService.deleteAssignment(
                 assignmentId,
+                currentUser
+        );
+    }
+
+    @Operation(
+            summary = "ASG-008 과제 최초 제출"
+    )
+    @PostMapping(
+            value =
+                    "/api/v1/assignments/{assignmentId}/submissions",
+            consumes =
+                    MediaType.MULTIPART_FORM_DATA_VALUE
+    )
+    public AssignmentSubmitResponse submitAssignment(
+            @PathVariable UUID assignmentId,
+
+            @RequestPart(
+                    value = "comment",
+                    required = false
+            )
+            String comment,
+
+            @RequestPart(
+                    value = "files",
+                    required = false
+            )
+            List<MultipartFile> files,
+
+            Authentication authentication
+    ) {
+        User currentUser =
+                currentUserResolver.resolve(
+                        authentication
+                );
+
+        return assignmentService.submitAssignment(
+                assignmentId,
+                comment,
+                files,
+                currentUser
+        );
+    }
+
+    @Operation(
+            summary = "ASG-009 내 과제 제출 수정"
+    )
+    @PutMapping(
+            value =
+                    "/api/v1/assignments/{assignmentId}/submissions/me",
+            consumes =
+                    MediaType.MULTIPART_FORM_DATA_VALUE
+    )
+    public AssignmentSubmitResponse updateMySubmission(
+            @PathVariable UUID assignmentId,
+
+            @RequestPart(
+                    value = "comment",
+                    required = false
+            )
+            String comment,
+
+            @RequestPart(
+                    value = "files",
+                    required = false
+            )
+            List<MultipartFile> files,
+
+            Authentication authentication
+    ) {
+        User currentUser =
+                currentUserResolver.resolve(
+                        authentication
+                );
+
+        return assignmentService.updateMySubmission(
+                assignmentId,
+                comment,
+                files,
                 currentUser
         );
     }

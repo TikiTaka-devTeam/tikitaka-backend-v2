@@ -7,6 +7,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,6 +23,7 @@ import com.tikitaka.assignment.dto.response.AssignmentFileResponse;
 import com.tikitaka.assignment.dto.response.AssignmentListItemResponse;
 import com.tikitaka.assignment.dto.response.AssignmentListResponse;
 import com.tikitaka.assignment.dto.response.AssignmentSubmissionResponse;
+import com.tikitaka.assignment.dto.response.AssignmentSubmitResponse;
 import com.tikitaka.assignment.dto.response.AssignmentSummaryResponse;
 import com.tikitaka.assignment.dto.response.AssignmentUpdateResponse;
 import com.tikitaka.assignment.entity.Assignment;
@@ -29,6 +31,8 @@ import com.tikitaka.assignment.entity.AssignmentFile;
 import com.tikitaka.assignment.entity.AssignmentGrade;
 import com.tikitaka.assignment.entity.AssignmentSubmission;
 import com.tikitaka.assignment.entity.GradingStatus;
+import com.tikitaka.assignment.entity.SubmissionFile;
+import com.tikitaka.assignment.entity.SubmissionStatus;
 import com.tikitaka.assignment.exception.AssignmentErrorCode;
 import com.tikitaka.assignment.repository.AssignmentFileRepository;
 import com.tikitaka.assignment.repository.AssignmentGradeRepository;
@@ -411,13 +415,148 @@ public class AssignmentService {
         );
     }
 
+    // ASG-008
+    @Transactional
+    public AssignmentSubmitResponse submitAssignment(
+            UUID assignmentId,
+            String comment,
+            List<MultipartFile> files,
+            User currentUser
+    ) {
+        Assignment assignment =
+                getActiveAssignment(
+                        assignmentId
+                );
+
+        SpaceMember member =
+                getApprovedMember(
+                        assignment.getSpace().getId(),
+                        currentUser.getId()
+                );
+
+        validateStudent(
+                member
+        );
+
+        validateAssignmentOpen(
+                assignment
+        );
+
+        if (assignmentSubmissionRepository
+                .existsByAssignmentIdAndStudentId(
+                        assignmentId,
+                        currentUser.getId()
+                )) {
+
+            throw new BusinessException(
+                    AssignmentErrorCode
+                            .SUBMISSION_ALREADY_EXISTS
+            );
+        }
+
+        AssignmentSubmission submission =
+                AssignmentSubmission.create(
+                        assignment,
+                        currentUser,
+                        comment,
+                        SubmissionStatus.SUBMITTED
+                );
+
+        assignmentSubmissionRepository.save(
+                submission
+        );
+
+        List<AssignmentFileResponse> fileResponses =
+                uploadSubmissionFiles(
+                        submission,
+                        files
+                );
+
+        return new AssignmentSubmitResponse(
+                submission.getId(),
+                assignment.getId(),
+                submission.getComment(),
+                fileResponses,
+                submission.getVersion(),
+                submission.getStatus().name(),
+                submission.getSubmittedAt()
+        );
+    }
+
+    // ASG-009
+    @Transactional
+    public AssignmentSubmitResponse updateMySubmission(
+            UUID assignmentId,
+            String comment,
+            List<MultipartFile> files,
+            User currentUser
+    ) {
+        Assignment assignment =
+                getActiveAssignment(
+                        assignmentId
+                );
+
+        SpaceMember member =
+                getApprovedMember(
+                        assignment.getSpace().getId(),
+                        currentUser.getId()
+                );
+
+        validateStudent(
+                member
+        );
+
+        validateAssignmentOpen(
+                assignment
+        );
+
+        AssignmentSubmission submission =
+                assignmentSubmissionRepository
+                        .findByAssignmentIdAndStudentId(
+                                assignmentId,
+                                currentUser.getId()
+                        )
+                        .orElseThrow(() ->
+                                new BusinessException(
+                                        AssignmentErrorCode
+                                                .SUBMISSION_NOT_FOUND
+                                )
+                        );
+
+        deleteSubmissionFiles(
+                submission
+        );
+
+        submission.resubmit(
+                comment,
+                SubmissionStatus.SUBMITTED
+        );
+
+        List<AssignmentFileResponse> fileResponses =
+                uploadSubmissionFiles(
+                        submission,
+                        files
+                );
+
+        return new AssignmentSubmitResponse(
+                submission.getId(),
+                assignment.getId(),
+                submission.getComment(),
+                fileResponses,
+                submission.getVersion(),
+                submission.getStatus().name(),
+                submission.getSubmittedAt()
+        );
+    }
+
     private AssignmentListItemResponse toListItem(
             Assignment assignment,
             SpaceMember member
     ) {
         String submissionStatus = null;
 
-        if (member.getRole() == SpaceMemberRole.STUDENT) {
+        if (member.getRole()
+                == SpaceMemberRole.STUDENT) {
 
             submissionStatus =
                     assignmentSubmissionRepository
@@ -426,7 +565,9 @@ public class AssignmentService {
                                     member.getUser().getId()
                             )
                             .map(submission ->
-                                    submission.getStatus().name()
+                                    submission
+                                            .getStatus()
+                                            .name()
                             )
                             .orElse(
                                     "NOT_SUBMITTED"
@@ -492,7 +633,8 @@ public class AssignmentService {
                         validFiles,
                         "assignments/"
                                 + assignment.getId(),
-                        FileUploadType.ASSIGNMENT_ATTACHMENT
+                        FileUploadType
+                                .ASSIGNMENT_ATTACHMENT
                 );
 
         List<AssignmentFile> entities =
@@ -527,14 +669,101 @@ public class AssignmentService {
                 .toList();
     }
 
+    private List<AssignmentFileResponse> uploadSubmissionFiles(
+            AssignmentSubmission submission,
+            List<MultipartFile> files
+    ) {
+        if (files == null || files.isEmpty()) {
+            return List.of();
+        }
+
+        List<MultipartFile> validFiles =
+                files.stream()
+                        .filter(file ->
+                                file != null
+                                        && !file.isEmpty()
+                                        && file.getSize() > 0
+                        )
+                        .toList();
+
+        if (validFiles.isEmpty()) {
+            return List.of();
+        }
+
+        List<S3UploadResult> uploaded =
+                s3Service.uploadAll(
+                        validFiles,
+                        "assignments/"
+                                + submission
+                                        .getAssignment()
+                                        .getId()
+                                + "/submissions/"
+                                + submission.getId(),
+                        FileUploadType
+                                .ASSIGNMENT_SUBMISSION
+                );
+
+        List<SubmissionFile> entities =
+                new ArrayList<>();
+
+        for (int i = 0;
+             i < uploaded.size();
+             i++) {
+
+            MultipartFile multipartFile =
+                    validFiles.get(i);
+
+            S3UploadResult result =
+                    uploaded.get(i);
+
+            entities.add(
+                    SubmissionFile.create(
+                            submission,
+                            multipartFile
+                                    .getOriginalFilename(),
+                            result.url()
+                    )
+            );
+        }
+
+        return submissionFileRepository
+                .saveAll(
+                        entities
+                )
+                .stream()
+                .map(AssignmentFileResponse::from)
+                .toList();
+    }
+
+    private void deleteSubmissionFiles(
+            AssignmentSubmission submission
+    ) {
+        List<SubmissionFile> existingFiles =
+                submissionFileRepository
+                        .findAllBySubmissionId(
+                                submission.getId()
+                        );
+
+        for (SubmissionFile file :
+                existingFiles) {
+
+            s3Service.deleteByUrlIfManaged(
+                    file.getFileUrl()
+            );
+        }
+
+        submissionFileRepository
+                .deleteAllBySubmissionId(
+                        submission.getId()
+                );
+
+        submissionFileRepository.flush();
+    }
+
     private void updateRetainedFiles(
             Assignment assignment,
             List<UUID> retainedFileIds
     ) {
-        /*
-         * retained_file_ids 자체가 생략된 경우
-         * 기존 파일 전체 유지
-         */
         if (retainedFileIds == null) {
             return;
         }
@@ -549,8 +778,7 @@ public class AssignmentService {
                 existingFiles.stream()
                         .map(AssignmentFile::getId)
                         .collect(
-                                java.util.stream.Collectors
-                                        .toSet()
+                                Collectors.toSet()
                         );
 
         Set<UUID> retainedIds =
@@ -573,11 +801,6 @@ public class AssignmentService {
             );
         }
 
-        /*
-         * retained_file_ids에 없는 기존 파일은 삭제
-         *
-         * []인 경우에는 전부 삭제된다.
-         */
         List<AssignmentFile> filesToDelete =
                 existingFiles.stream()
                         .filter(file ->
@@ -661,6 +884,30 @@ public class AssignmentService {
                 AssignmentErrorCode
                         .ASSIGNMENT_MANAGE_FORBIDDEN
         );
+    }
+
+    private void validateStudent(
+            SpaceMember member
+    ) {
+        if (member.getRole()
+                == SpaceMemberRole.STUDENT) {
+            return;
+        }
+
+        throw new BusinessException(
+                AssignmentErrorCode.STUDENT_ONLY
+        );
+    }
+
+    private void validateAssignmentOpen(
+            Assignment assignment
+    ) {
+        if (isClosed(assignment)) {
+            throw new BusinessException(
+                    AssignmentErrorCode
+                            .ASSIGNMENT_CLOSED
+            );
+        }
     }
 
     private boolean isClosed(
