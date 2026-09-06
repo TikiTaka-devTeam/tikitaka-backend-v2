@@ -3,6 +3,8 @@ package com.tikitaka.space.service;
 import com.tikitaka.global.exception.BusinessException;
 import com.tikitaka.space.dto.request.JoinRequestActionRequest;
 import com.tikitaka.space.dto.request.JoinSettingsRequest;
+import com.tikitaka.space.dto.request.RolePermissionsRequest;
+import com.tikitaka.space.dto.response.InviteCodeResponse;
 import com.tikitaka.space.dto.response.JoinRequestActionResponse;
 import com.tikitaka.space.dto.response.JoinRequestListResponse;
 import com.tikitaka.space.dto.response.JoinRequestResponse;
@@ -10,9 +12,11 @@ import com.tikitaka.space.dto.response.JoinSettingsResponse;
 import com.tikitaka.space.dto.response.MemberDetailResponse;
 import com.tikitaka.space.dto.response.MemberListItemResponse;
 import com.tikitaka.space.dto.response.MemberListResponse;
+import com.tikitaka.space.dto.response.RolePermissionsResponse;
 import com.tikitaka.space.entity.PermissionType;
 import com.tikitaka.space.entity.Space;
 import com.tikitaka.space.entity.SpaceMember;
+import com.tikitaka.space.entity.SpaceMemberPermission;
 import com.tikitaka.space.entity.SpaceMemberRole;
 import com.tikitaka.space.entity.SpaceMemberStatus;
 import com.tikitaka.space.exception.SpaceMemberErrorCode;
@@ -228,6 +232,29 @@ public class SpaceMemberService {
         );
     }
 
+    /**
+     * MBR-006
+     * 초대 코드 조회
+     */
+    public InviteCodeResponse getInviteCode(
+            UUID spaceId,
+            User currentUser
+    ) {
+        requireMemberManagePermission(
+                spaceId,
+                currentUser
+        );
+
+        Space space =
+                getSpace(spaceId);
+
+        return new InviteCodeResponse(
+                space.getId(),
+                space.getSpaceCode(),
+                space.isAutoApprove()
+        );
+    }
+
     @Transactional
     public JoinSettingsResponse updateJoinSettings(
             UUID spaceId,
@@ -253,7 +280,6 @@ public class SpaceMemberService {
                 autoApprove
         );
 
-        // 자동승인을 켜는 순간 기존 승인 대기 학생들도 모두 승인
         if (autoApprove) {
 
             List<SpaceMember> pendingMembers =
@@ -345,6 +371,165 @@ public class SpaceMemberService {
 
         throw new BusinessException(
                 SpaceMemberErrorCode.MEMBER_MANAGE_FORBIDDEN
+        );
+    }
+
+    /**
+     * MBR-009
+     * 멤버 역할 및 조교 세부 권한 최종 저장
+     */
+    @Transactional
+    public RolePermissionsResponse updateRolePermissions(
+            UUID spaceId,
+            UUID memberId,
+            RolePermissionsRequest request,
+            User currentUser
+    ) {
+        Space space =
+                getSpace(spaceId);
+
+        if (!space.getProfessor()
+                .getId()
+                .equals(currentUser.getId())) {
+
+            throw new BusinessException(
+                    SpaceMemberErrorCode.PROFESSOR_ONLY
+            );
+        }
+
+        SpaceMember target =
+                getMemberInSpace(
+                        spaceId,
+                        memberId
+                );
+
+        if (target.getStatus() != SpaceMemberStatus.APPROVED
+                || target.getRemovedAt() != null) {
+
+            throw new BusinessException(
+                    SpaceMemberErrorCode.MEMBER_NOT_FOUND
+            );
+        }
+
+        if (target.getRole() == SpaceMemberRole.PROFESSOR
+                || request.role() == SpaceMemberRole.PROFESSOR) {
+
+            throw new BusinessException(
+                    SpaceMemberErrorCode.PROFESSOR_ROLE_CHANGE_FORBIDDEN
+            );
+        }
+
+        if (request.role() == SpaceMemberRole.STUDENT
+                && !request.permissions().isEmpty()) {
+
+            throw new BusinessException(
+                    SpaceMemberErrorCode.STUDENT_PERMISSION_NOT_ALLOWED
+            );
+        }
+
+        List<PermissionType> permissions =
+                request.permissions()
+                        .stream()
+                        .distinct()
+                        .toList();
+
+        target.updateRole(
+                request.role()
+        );
+
+        permissionRepository.deleteAllBySpaceMemberId(
+                target.getId()
+        );
+
+        permissionRepository.flush();
+
+        if (request.role() == SpaceMemberRole.ASSISTANT) {
+
+            List<SpaceMemberPermission> permissionEntities =
+                    permissions.stream()
+                            .map(permission ->
+                                    SpaceMemberPermission.create(
+                                            target,
+                                            permission
+                                    )
+                            )
+                            .toList();
+
+            permissionRepository.saveAll(
+                    permissionEntities
+            );
+        }
+
+        return new RolePermissionsResponse(
+                target.getId(),
+                target.getRole(),
+                request.role() == SpaceMemberRole.ASSISTANT
+                        ? permissions
+                        : List.of()
+        );
+    }
+
+    /**
+     * MBR-010
+     * 조교 권한 조회
+     */
+    public RolePermissionsResponse getPermissions(
+            UUID spaceId,
+            UUID memberId,
+            User currentUser
+    ) {
+        SpaceMember actor =
+                getApprovedMember(
+                        spaceId,
+                        currentUser.getId()
+                );
+
+        SpaceMember target =
+                getMemberInSpace(
+                        spaceId,
+                        memberId
+                );
+
+        if (target.getStatus() != SpaceMemberStatus.APPROVED
+                || target.getRemovedAt() != null) {
+
+            throw new BusinessException(
+                    SpaceMemberErrorCode.MEMBER_NOT_FOUND
+            );
+        }
+
+        boolean professor =
+                actor.getRole() == SpaceMemberRole.PROFESSOR;
+
+        boolean sameAssistant =
+                actor.getId().equals(target.getId())
+                        && actor.getRole() == SpaceMemberRole.ASSISTANT;
+
+        if (!professor && !sameAssistant) {
+
+            throw new BusinessException(
+                    SpaceMemberErrorCode.PERMISSION_VIEW_FORBIDDEN
+            );
+        }
+
+        List<PermissionType> permissions =
+                permissionRepository
+                        .findAllBySpaceMemberId(
+                                target.getId()
+                        )
+                        .stream()
+                        .map(SpaceMemberPermission::getPermission)
+                        .sorted(
+                                Comparator.comparingInt(
+                                        PermissionType::ordinal
+                                )
+                        )
+                        .toList();
+
+        return new RolePermissionsResponse(
+                target.getId(),
+                target.getRole(),
+                permissions
         );
     }
 

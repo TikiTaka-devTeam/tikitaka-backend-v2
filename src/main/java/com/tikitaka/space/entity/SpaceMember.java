@@ -139,6 +139,10 @@ public class SpaceMember extends BaseTimeEntity {
         this.removedAt = now;
     }
 
+    public void updateRole(SpaceMemberRole role) {
+        this.role = role;
+    }
+
     // 내보내진 학생이 다시 Space에 참가 신청할 때 사용
     public void rejoin(
             SpaceColorKey colorKey,
