@@ -51,6 +51,7 @@ public enum SpaceMemberErrorCode implements ErrorCode {
             "교수는 내보낼 수 없습니다."
     );
 
+
     private final HttpStatus status;
     private final String code;
     private final String message;
