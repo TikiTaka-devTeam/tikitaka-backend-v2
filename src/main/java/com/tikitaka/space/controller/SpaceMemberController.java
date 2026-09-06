@@ -4,11 +4,16 @@ import com.tikitaka.global.config.OpenApiConfig;
 import com.tikitaka.global.security.CurrentUserResolver;
 import com.tikitaka.space.dto.request.JoinRequestActionRequest;
 import com.tikitaka.space.dto.request.JoinSettingsRequest;
+import com.tikitaka.space.dto.request.RolePermissionsRequest;
+
 import com.tikitaka.space.dto.response.JoinRequestActionResponse;
 import com.tikitaka.space.dto.response.JoinRequestListResponse;
 import com.tikitaka.space.dto.response.JoinSettingsResponse;
 import com.tikitaka.space.dto.response.MemberDetailResponse;
 import com.tikitaka.space.dto.response.MemberListResponse;
+import com.tikitaka.space.dto.response.InviteCodeResponse;
+import com.tikitaka.space.dto.response.RolePermissionsResponse;
+
 import com.tikitaka.space.service.SpaceMemberService;
 import com.tikitaka.user.entity.User;
 import io.swagger.v3.oas.annotations.Operation;
@@ -93,6 +98,19 @@ public class SpaceMemberController {
         );
     }
 
+    @Operation(summary = "MBR-006 초대 코드 조회")
+    @GetMapping("/invite-code")
+    public ResponseEntity<InviteCodeResponse> getInviteCode(
+                @PathVariable UUID spaceId,
+                Authentication authentication
+    ) {
+        User currentUser = currentUserResolver.resolve(authentication);
+
+        return ResponseEntity.ok(
+                spaceMemberService.getInviteCode(spaceId, currentUser)
+        );
+   }
+
     @Operation(summary = "MBR-007 자동 승인 설정")
     @PatchMapping("/join-settings")
     public ResponseEntity<JoinSettingsResponse> updateJoinSettings(
@@ -116,5 +134,43 @@ public class SpaceMemberController {
         User currentUser = currentUserResolver.resolve(authentication);
         spaceMemberService.removeMember(spaceId, memberId, currentUser);
         return ResponseEntity.noContent().build();
+    }
+
+    @Operation(summary = "MBR-009 멤버 역할 및 조교 권한 저장")
+    @PutMapping("/members/{memberId}/role-permissions")
+    public ResponseEntity<RolePermissionsResponse> updateRolePermissions(
+        @PathVariable UUID spaceId,
+        @PathVariable UUID memberId,
+        @Valid @RequestBody RolePermissionsRequest request,
+        Authentication authentication
+    ) {
+    User currentUser = currentUserResolver.resolve(authentication);
+
+        return ResponseEntity.ok(
+            spaceMemberService.updateRolePermissions(
+                    spaceId,
+                    memberId,
+                    request,
+                    currentUser
+            )
+        );
+    }
+
+    @Operation(summary = "MBR-010 조교 권한 조회")
+    @GetMapping("/members/{memberId}/permissions")
+    public ResponseEntity<RolePermissionsResponse> getPermissions(
+        @PathVariable UUID spaceId,
+        @PathVariable UUID memberId,
+        Authentication authentication
+    ) {
+    User currentUser = currentUserResolver.resolve(authentication);
+
+        return ResponseEntity.ok(
+            spaceMemberService.getPermissions(
+                    spaceId,
+                    memberId,
+                    currentUser
+            )
+        );
     }
 }
