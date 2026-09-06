@@ -61,17 +61,13 @@ public class AssignmentController {
     private final CurrentUserResolver currentUserResolver;
 
     @Operation(summary = "ASG-001 과제 목록 조회")
-    @GetMapping(
-            "/api/v1/spaces/{spaceId}/assignments"
-    )
+    @GetMapping("/api/v1/spaces/{spaceId}/assignments")
     public AssignmentListResponse getAssignments(
             @PathVariable UUID spaceId,
             Authentication authentication
     ) {
         User currentUser =
-                currentUserResolver.resolve(
-                        authentication
-                );
+                currentUserResolver.resolve(authentication);
 
         return assignmentService.getAssignments(
                 spaceId,
@@ -80,17 +76,13 @@ public class AssignmentController {
     }
 
     @Operation(summary = "ASG-002 과제 현황 요약 조회")
-    @GetMapping(
-            "/api/v1/spaces/{spaceId}/assignments/summary"
-    )
+    @GetMapping("/api/v1/spaces/{spaceId}/assignments/summary")
     public AssignmentSummaryResponse getAssignmentSummary(
             @PathVariable UUID spaceId,
             Authentication authentication
     ) {
         User currentUser =
-                currentUserResolver.resolve(
-                        authentication
-                );
+                currentUserResolver.resolve(authentication);
 
         return assignmentService.getAssignmentSummary(
                 spaceId,
@@ -99,17 +91,13 @@ public class AssignmentController {
     }
 
     @Operation(summary = "ASG-003 과제 상세 조회")
-    @GetMapping(
-            "/api/v1/assignments/{assignmentId}"
-    )
+    @GetMapping("/api/v1/assignments/{assignmentId}")
     public AssignmentDetailResponse getAssignment(
             @PathVariable UUID assignmentId,
             Authentication authentication
     ) {
         User currentUser =
-                currentUserResolver.resolve(
-                        authentication
-                );
+                currentUserResolver.resolve(authentication);
 
         return assignmentService.getAssignment(
                 assignmentId,
@@ -136,10 +124,8 @@ public class AssignmentController {
                     )
     )
     @PostMapping(
-            value =
-                    "/api/v1/spaces/{spaceId}/assignments",
-            consumes =
-                    MediaType.MULTIPART_FORM_DATA_VALUE
+            value = "/api/v1/spaces/{spaceId}/assignments",
+            consumes = MediaType.MULTIPART_FORM_DATA_VALUE
     )
     public AssignmentCreateResponse createAssignment(
             @PathVariable UUID spaceId,
@@ -157,9 +143,7 @@ public class AssignmentController {
             Authentication authentication
     ) {
         User currentUser =
-                currentUserResolver.resolve(
-                        authentication
-                );
+                currentUserResolver.resolve(authentication);
 
         return assignmentService.createAssignment(
                 spaceId,
@@ -169,12 +153,27 @@ public class AssignmentController {
         );
     }
 
-    @Operation(summary = "ASG-005 과제 수정")
+    @Operation(
+            summary = "ASG-005 과제 수정",
+            requestBody =
+                    @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                            content =
+                                    @Content(
+                                            mediaType =
+                                                    MediaType.MULTIPART_FORM_DATA_VALUE,
+                                            encoding = {
+                                                    @Encoding(
+                                                            name = "assignment_data",
+                                                            contentType =
+                                                                    MediaType.APPLICATION_JSON_VALUE
+                                                    )
+                                            }
+                                    )
+                    )
+    )
     @PatchMapping(
-            value =
-                    "/api/v1/assignments/{assignmentId}",
-            consumes =
-                    MediaType.MULTIPART_FORM_DATA_VALUE
+            value = "/api/v1/assignments/{assignmentId}",
+            consumes = MediaType.MULTIPART_FORM_DATA_VALUE
     )
     public AssignmentUpdateResponse updateAssignment(
             @PathVariable UUID assignmentId,
@@ -192,9 +191,7 @@ public class AssignmentController {
             Authentication authentication
     ) {
         User currentUser =
-                currentUserResolver.resolve(
-                        authentication
-                );
+                currentUserResolver.resolve(authentication);
 
         return assignmentService.updateAssignment(
                 assignmentId,
@@ -205,17 +202,13 @@ public class AssignmentController {
     }
 
     @Operation(summary = "ASG-006 과제 수동 마감")
-    @PatchMapping(
-            "/api/v1/assignments/{assignmentId}/close"
-    )
+    @PatchMapping("/api/v1/assignments/{assignmentId}/close")
     public AssignmentCloseResponse closeAssignment(
             @PathVariable UUID assignmentId,
             Authentication authentication
     ) {
         User currentUser =
-                currentUserResolver.resolve(
-                        authentication
-                );
+                currentUserResolver.resolve(authentication);
 
         return assignmentService.closeAssignment(
                 assignmentId,
@@ -224,17 +217,13 @@ public class AssignmentController {
     }
 
     @Operation(summary = "ASG-007 과제 삭제")
-    @DeleteMapping(
-            "/api/v1/assignments/{assignmentId}"
-    )
+    @DeleteMapping("/api/v1/assignments/{assignmentId}")
     public AssignmentDeleteResponse deleteAssignment(
             @PathVariable UUID assignmentId,
             Authentication authentication
     ) {
         User currentUser =
-                currentUserResolver.resolve(
-                        authentication
-                );
+                currentUserResolver.resolve(authentication);
 
         return assignmentService.deleteAssignment(
                 assignmentId,
@@ -244,10 +233,8 @@ public class AssignmentController {
 
     @Operation(summary = "ASG-008 과제 최초 제출")
     @PostMapping(
-            value =
-                    "/api/v1/assignments/{assignmentId}/submissions",
-            consumes =
-                    MediaType.MULTIPART_FORM_DATA_VALUE
+            value = "/api/v1/assignments/{assignmentId}/submissions",
+            consumes = MediaType.MULTIPART_FORM_DATA_VALUE
     )
     public AssignmentSubmitResponse submitAssignment(
             @PathVariable UUID assignmentId,
@@ -267,9 +254,7 @@ public class AssignmentController {
             Authentication authentication
     ) {
         User currentUser =
-                currentUserResolver.resolve(
-                        authentication
-                );
+                currentUserResolver.resolve(authentication);
 
         return assignmentService.submitAssignment(
                 assignmentId,
@@ -281,10 +266,8 @@ public class AssignmentController {
 
     @Operation(summary = "ASG-009 내 과제 제출 수정")
     @PutMapping(
-            value =
-                    "/api/v1/assignments/{assignmentId}/submissions/me",
-            consumes =
-                    MediaType.MULTIPART_FORM_DATA_VALUE
+            value = "/api/v1/assignments/{assignmentId}/submissions/me",
+            consumes = MediaType.MULTIPART_FORM_DATA_VALUE
     )
     public AssignmentSubmitResponse updateMySubmission(
             @PathVariable UUID assignmentId,
@@ -304,9 +287,7 @@ public class AssignmentController {
             Authentication authentication
     ) {
         User currentUser =
-                currentUserResolver.resolve(
-                        authentication
-                );
+                currentUserResolver.resolve(authentication);
 
         return assignmentService.updateMySubmission(
                 assignmentId,
@@ -317,17 +298,13 @@ public class AssignmentController {
     }
 
     @Operation(summary = "ASG-010 학생 제출 현황 조회")
-    @GetMapping(
-            "/api/v1/assignments/{assignmentId}/submissions"
-    )
+    @GetMapping("/api/v1/assignments/{assignmentId}/submissions")
     public AssignmentSubmissionListResponse getSubmissions(
             @PathVariable UUID assignmentId,
             Authentication authentication
     ) {
         User currentUser =
-                currentUserResolver.resolve(
-                        authentication
-                );
+                currentUserResolver.resolve(authentication);
 
         return assignmentService.getSubmissions(
                 assignmentId,
@@ -336,17 +313,13 @@ public class AssignmentController {
     }
 
     @Operation(summary = "ASG-011 제출물 일괄 다운로드")
-    @GetMapping(
-            "/api/v1/assignments/{assignmentId}/submissions/download"
-    )
+    @GetMapping("/api/v1/assignments/{assignmentId}/submissions/download")
     public AssignmentSubmissionDownloadResponse downloadSubmissions(
             @PathVariable UUID assignmentId,
             Authentication authentication
     ) {
         User currentUser =
-                currentUserResolver.resolve(
-                        authentication
-                );
+                currentUserResolver.resolve(authentication);
 
         return assignmentService.downloadSubmissions(
                 assignmentId,
@@ -355,9 +328,7 @@ public class AssignmentController {
     }
 
     @Operation(summary = "ASG-012 과제 만점 설정")
-    @PatchMapping(
-            "/api/v1/assignments/{assignmentId}/max-score"
-    )
+    @PatchMapping("/api/v1/assignments/{assignmentId}/max-score")
     public AssignmentMaxScoreResponse updateMaxScore(
             @PathVariable UUID assignmentId,
 
@@ -368,9 +339,7 @@ public class AssignmentController {
             Authentication authentication
     ) {
         User currentUser =
-                currentUserResolver.resolve(
-                        authentication
-                );
+                currentUserResolver.resolve(authentication);
 
         return assignmentService.updateMaxScore(
                 assignmentId,
@@ -380,9 +349,7 @@ public class AssignmentController {
     }
 
     @Operation(summary = "ASG-013 성적 입력 및 임시 저장")
-    @PutMapping(
-            "/api/v1/assignments/{assignmentId}/grades"
-    )
+    @PutMapping("/api/v1/assignments/{assignmentId}/grades")
     public AssignmentGradesSaveResponse saveGrades(
             @PathVariable UUID assignmentId,
 
@@ -393,9 +360,7 @@ public class AssignmentController {
             Authentication authentication
     ) {
         User currentUser =
-                currentUserResolver.resolve(
-                        authentication
-                );
+                currentUserResolver.resolve(authentication);
 
         return assignmentService.saveGrades(
                 assignmentId,
@@ -405,17 +370,13 @@ public class AssignmentController {
     }
 
     @Operation(summary = "ASG-014 성적 최종 등록")
-    @PostMapping(
-            "/api/v1/assignments/{assignmentId}/grades/finalize"
-    )
+    @PostMapping("/api/v1/assignments/{assignmentId}/grades/finalize")
     public AssignmentGradesFinalizeResponse finalizeGrades(
             @PathVariable UUID assignmentId,
             Authentication authentication
     ) {
         User currentUser =
-                currentUserResolver.resolve(
-                        authentication
-                );
+                currentUserResolver.resolve(authentication);
 
         return assignmentService.finalizeGrades(
                 assignmentId,
@@ -438,9 +399,7 @@ public class AssignmentController {
             Authentication authentication
     ) {
         User currentUser =
-                currentUserResolver.resolve(
-                        authentication
-                );
+                currentUserResolver.resolve(authentication);
 
         return assignmentService.updateFinalizedGrade(
                 assignmentId,
