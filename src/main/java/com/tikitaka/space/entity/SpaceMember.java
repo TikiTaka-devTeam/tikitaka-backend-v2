@@ -1,681 +1,171 @@
-package com.tikitaka.space.service;
-
-import com.tikitaka.global.exception.BusinessException;
-import com.tikitaka.space.dto.request.JoinRequestActionRequest;
-import com.tikitaka.space.dto.request.JoinSettingsRequest;
-import com.tikitaka.space.dto.request.RolePermissionsRequest;
-import com.tikitaka.space.dto.response.InviteCodeResponse;
-import com.tikitaka.space.dto.response.JoinRequestActionResponse;
-import com.tikitaka.space.dto.response.JoinRequestListResponse;
-import com.tikitaka.space.dto.response.JoinRequestResponse;
-import com.tikitaka.space.dto.response.JoinSettingsResponse;
-import com.tikitaka.space.dto.response.MemberDetailResponse;
-import com.tikitaka.space.dto.response.MemberListItemResponse;
-import com.tikitaka.space.dto.response.MemberListResponse;
-import com.tikitaka.space.dto.response.RolePermissionsResponse;
-import com.tikitaka.space.entity.PermissionType;
-import com.tikitaka.space.entity.Space;
-import com.tikitaka.space.entity.SpaceMember;
-import com.tikitaka.space.entity.SpaceMemberPermission;
-import com.tikitaka.space.entity.SpaceMemberRole;
-import com.tikitaka.space.entity.SpaceMemberStatus;
-import com.tikitaka.space.exception.SpaceMemberErrorCode;
-import com.tikitaka.space.repository.SpaceMemberPermissionRepository;
-import com.tikitaka.space.repository.SpaceMemberRepository;
-import com.tikitaka.space.repository.SpaceRepository;
-import com.tikitaka.user.entity.User;
-
-import lombok.RequiredArgsConstructor;
-
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+package com.tikitaka.space.entity;
 
 import java.time.Instant;
-import java.util.Comparator;
-import java.util.List;
 import java.util.UUID;
 
-@Service
-@RequiredArgsConstructor
-@Transactional(readOnly = true)
-public class SpaceMemberService {
+import com.tikitaka.global.common.entity.BaseTimeEntity;
+import com.tikitaka.user.entity.User;
 
-    private final SpaceRepository spaceRepository;
-    private final SpaceMemberRepository spaceMemberRepository;
-    private final SpaceMemberPermissionRepository permissionRepository;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.Table;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 
-    public MemberListResponse getMembers(
-            UUID spaceId,
-            User currentUser
+@Getter
+@Entity
+@Table(name = "space_members")
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+public class SpaceMember extends BaseTimeEntity {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private UUID id;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "space_id", nullable = false)
+    private Space space;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "color_key", nullable = false, length = 20)
+    private SpaceColorKey colorKey;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private SpaceMemberRole role;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private SpaceMemberStatus status = SpaceMemberStatus.PENDING;
+
+    @Column(name = "requested_at", nullable = false)
+    private Instant requestedAt;
+
+    @Column(name = "approved_at")
+    private Instant approvedAt;
+
+    @Column(name = "denied_at")
+    private Instant deniedAt;
+
+    @Column(name = "removed_at")
+    private Instant removedAt;
+
+    @Column(name = "last_accessed_at")
+    private Instant lastAccessedAt;
+
+    private SpaceMember(
+            Space space,
+            User user,
+            SpaceColorKey colorKey,
+            SpaceMemberRole role,
+            SpaceMemberStatus status,
+            Instant requestedAt,
+            Instant approvedAt
     ) {
-        getApprovedMember(
-                spaceId,
-                currentUser.getId()
-        );
+        this.space = space;
+        this.user = user;
+        this.colorKey = colorKey;
+        this.role = role;
+        this.status = status;
+        this.requestedAt = requestedAt;
+        this.approvedAt = approvedAt;
+    }
 
-        List<MemberListItemResponse> members =
-                spaceMemberRepository
-                        .findAllBySpaceIdAndStatusAndRemovedAtIsNull(
-                                spaceId,
-                                SpaceMemberStatus.APPROVED
-                        )
-                        .stream()
-                        .sorted(
-                                Comparator
-                                        .comparing(
-                                                (SpaceMember member) ->
-                                                        roleOrder(member.getRole())
-                                        )
-                                        .thenComparing(
-                                                member ->
-                                                        member.getUser().getName()
-                                        )
-                                        .thenComparing(
-                                                SpaceMember::getId
-                                        )
-                        )
-                        .map(member ->
-                                new MemberListItemResponse(
-                                        member.getId(),
-                                        member.getRole(),
-                                        member.getUser().getName(),
-                                        member.getUser().getMemberIdNumber(),
-                                        member.getUser().getProfileUrl()
-                                )
-                        )
-                        .toList();
-
-        return new MemberListResponse(
-                members.size(),
-                members
+    public static SpaceMember professor(
+            Space space,
+            User user,
+            SpaceColorKey colorKey,
+            Instant now
+    ) {
+        return new SpaceMember(
+                space,
+                user,
+                colorKey,
+                SpaceMemberRole.PROFESSOR,
+                SpaceMemberStatus.APPROVED,
+                now,
+                now
         );
     }
 
-    public MemberDetailResponse getMemberDetail(
-            UUID spaceId,
-            UUID memberId,
-            User currentUser
+    public static SpaceMember student(
+            Space space,
+            User user,
+            SpaceColorKey colorKey,
+            boolean autoApprove,
+            Instant now
     ) {
-        requireMemberManagePermission(
-                spaceId,
-                currentUser
-        );
-
-        SpaceMember target =
-                getMemberInSpace(
-                        spaceId,
-                        memberId
-                );
-
-        if (target.getStatus() != SpaceMemberStatus.APPROVED
-                || target.getRemovedAt() != null) {
-
-            throw new BusinessException(
-                    SpaceMemberErrorCode.MEMBER_NOT_FOUND
-            );
-        }
-
-        User user =
-                target.getUser();
-
-        return new MemberDetailResponse(
-                target.getId(),
-                user.getName(),
-                user.getUniv(),
-                user.getEmail(),
-                user.getMajor(),
-                user.getMemberIdNumber(),
-                target.getRole(),
-                target.getApprovedAt()
-        );
-    }
-
-    public JoinRequestListResponse getJoinRequests(
-            UUID spaceId,
-            User currentUser
-    ) {
-        requireMemberManagePermission(
-                spaceId,
-                currentUser
-        );
-
-        List<JoinRequestResponse> requests =
-                spaceMemberRepository
-                        .findAllBySpaceIdAndStatusAndRemovedAtIsNull(
-                                spaceId,
-                                SpaceMemberStatus.PENDING
-                        )
-                        .stream()
-                        .sorted(
-                                Comparator
-                                        .comparing(
-                                                SpaceMember::getRequestedAt
-                                        )
-                                        .thenComparing(
-                                                SpaceMember::getId
-                                        )
-                        )
-                        .map(member ->
-                                new JoinRequestResponse(
-                                        member.getId(),
-                                        member.getUser().getId(),
-                                        member.getUser().getName(),
-                                        member.getUser().getMemberIdNumber(),
-                                        member.getUser().getProfileUrl(),
-                                        member.getRequestedAt()
-                                )
-                        )
-                        .toList();
-
-        return new JoinRequestListResponse(
-                requests
-        );
-    }
-
-    @Transactional
-    public JoinRequestActionResponse approveJoinRequests(
-            UUID spaceId,
-            JoinRequestActionRequest request,
-            User currentUser
-    ) {
-        requireMemberManagePermission(
-                spaceId,
-                currentUser
-        );
-
-        List<SpaceMember> targets =
-                getPendingRequests(
-                        spaceId,
-                        request.joinRequestIds()
-                );
-
-        Instant now =
-                Instant.now();
-
-        targets.forEach(
-                member ->
-                        member.approve(now)
-        );
-
-        return JoinRequestActionResponse.approved(
-                targets.size()
-        );
-    }
-
-    @Transactional
-    public JoinRequestActionResponse denyJoinRequests(
-            UUID spaceId,
-            JoinRequestActionRequest request,
-            User currentUser
-    ) {
-        requireMemberManagePermission(
-                spaceId,
-                currentUser
-        );
-
-        List<SpaceMember> targets =
-                getPendingRequests(
-                        spaceId,
-                        request.joinRequestIds()
-                );
-
-        Instant now =
-                Instant.now();
-
-        targets.forEach(
-                member ->
-                        member.deny(now)
-        );
-
-        return JoinRequestActionResponse.denied(
-                targets.size()
-        );
-    }
-
-    /*
-     * MBR-006
-     * 초대 코드 조회
-     */
-    public InviteCodeResponse getInviteCode(
-            UUID spaceId,
-            User currentUser
-    ) {
-        requireMemberManagePermission(
-                spaceId,
-                currentUser
-        );
-
-        Space space =
-                getSpace(spaceId);
-
-        return new InviteCodeResponse(
-                space.getId(),
-                space.getSpaceCode(),
-                space.isAutoApprove()
-        );
-    }
-
-    @Transactional
-    public JoinSettingsResponse updateJoinSettings(
-            UUID spaceId,
-            JoinSettingsRequest request,
-            User currentUser
-    ) {
-        Space space =
-                getSpace(spaceId);
-
-        if (!space.getProfessor()
-                .getId()
-                .equals(currentUser.getId())) {
-
-            throw new BusinessException(
-                    SpaceMemberErrorCode.PROFESSOR_ONLY
-            );
-        }
-
-        boolean autoApprove =
-                request.autoApprove();
-
-        space.updateAutoApprove(
+        return new SpaceMember(
+                space,
+                user,
+                colorKey,
+                SpaceMemberRole.STUDENT,
                 autoApprove
-        );
-
-        // 자동승인을 켜는 순간 기존 승인 대기 학생들도 모두 승인
-        if (autoApprove) {
-
-            List<SpaceMember> pendingMembers =
-                    spaceMemberRepository
-                            .findAllBySpaceIdAndStatusAndRemovedAtIsNull(
-                                    spaceId,
-                                    SpaceMemberStatus.PENDING
-                            );
-
-            Instant now =
-                    Instant.now();
-
-            pendingMembers.forEach(
-                    member ->
-                            member.approve(now)
-            );
-        }
-
-        return new JoinSettingsResponse(
-                space.getId(),
-                space.isAutoApprove()
+                        ? SpaceMemberStatus.APPROVED
+                        : SpaceMemberStatus.PENDING,
+                now,
+                autoApprove
+                        ? now
+                        : null
         );
     }
 
-    @Transactional
-    public void removeMember(
-            UUID spaceId,
-            UUID memberId,
-            User currentUser
-    ) {
-        SpaceMember actor =
-                getApprovedMember(
-                        spaceId,
-                        currentUser.getId()
-                );
-
-        SpaceMember target =
-                getMemberInSpace(
-                        spaceId,
-                        memberId
-                );
-
-        if (target.getStatus() != SpaceMemberStatus.APPROVED
-                || target.getRemovedAt() != null) {
-
-            throw new BusinessException(
-                    SpaceMemberErrorCode.MEMBER_NOT_FOUND
-            );
-        }
-
-        if (actor.getId()
-                .equals(target.getId())) {
-
-            throw new BusinessException(
-                    SpaceMemberErrorCode.CANNOT_REMOVE_SELF
-            );
-        }
-
-        if (target.getRole()
-                == SpaceMemberRole.PROFESSOR) {
-
-            throw new BusinessException(
-                    SpaceMemberErrorCode.CANNOT_REMOVE_PROFESSOR
-            );
-        }
-
-        if (actor.getRole()
-                == SpaceMemberRole.PROFESSOR) {
-
-            target.remove(
-                    Instant.now()
-            );
-
-            return;
-        }
-
-        if (actor.getRole()
-                == SpaceMemberRole.ASSISTANT
-                && hasMemberManagePermission(actor)
-                && target.getRole()
-                == SpaceMemberRole.STUDENT) {
-
-            target.remove(
-                    Instant.now()
-            );
-
-            return;
-        }
-
-        throw new BusinessException(
-                SpaceMemberErrorCode.MEMBER_MANAGE_FORBIDDEN
-        );
+    public void approve(Instant now) {
+        this.status = SpaceMemberStatus.APPROVED;
+        this.approvedAt = now;
+        this.deniedAt = null;
     }
 
-    /*
-     * MBR-009
-     * 멤버 역할 및 조교 권한 저장
-     */
-    @Transactional
-    public RolePermissionsResponse updateRolePermissions(
-            UUID spaceId,
-            UUID memberId,
-            RolePermissionsRequest request,
-            User currentUser
-    ) {
-        Space space =
-                getSpace(spaceId);
-
-        if (!space.getProfessor()
-                .getId()
-                .equals(currentUser.getId())) {
-
-            throw new BusinessException(
-                    SpaceMemberErrorCode.PROFESSOR_ONLY
-            );
-        }
-
-        SpaceMember target =
-                getMemberInSpace(
-                        spaceId,
-                        memberId
-                );
-
-        if (target.getStatus() != SpaceMemberStatus.APPROVED
-                || target.getRemovedAt() != null) {
-
-            throw new BusinessException(
-                    SpaceMemberErrorCode.MEMBER_NOT_FOUND
-            );
-        }
-
-        if (target.getRole() == SpaceMemberRole.PROFESSOR
-                || request.role() == SpaceMemberRole.PROFESSOR) {
-
-            throw new BusinessException(
-                    SpaceMemberErrorCode.PROFESSOR_ROLE_CHANGE_FORBIDDEN
-            );
-        }
-
-        if (request.role() == SpaceMemberRole.STUDENT
-                && !request.permissions().isEmpty()) {
-
-            throw new BusinessException(
-                    SpaceMemberErrorCode.STUDENT_PERMISSION_NOT_ALLOWED
-            );
-        }
-
-        List<PermissionType> permissions =
-                request.permissions()
-                        .stream()
-                        .distinct()
-                        .toList();
-
-        target.updateRole(
-                request.role()
-        );
-
-        /*
-         * PUT이므로 기존 조교 권한을 전부 삭제한 뒤
-         * 요청으로 전달된 최종 권한을 다시 저장한다.
-         */
-        permissionRepository.deleteAllBySpaceMemberId(
-                target.getId()
-        );
-
-        permissionRepository.flush();
-
-        if (request.role() == SpaceMemberRole.ASSISTANT) {
-
-            List<SpaceMemberPermission> permissionEntities =
-                    permissions.stream()
-                            .map(permission ->
-                                    SpaceMemberPermission.create(
-                                            target,
-                                            permission
-                                    )
-                            )
-                            .toList();
-
-            permissionRepository.saveAll(
-                    permissionEntities
-            );
-        }
-
-        return new RolePermissionsResponse(
-                target.getId(),
-                target.getRole(),
-                request.role() == SpaceMemberRole.ASSISTANT
-                        ? permissions
-                        : List.of()
-        );
+    public void deny(Instant now) {
+        this.status = SpaceMemberStatus.DENIED;
+        this.deniedAt = now;
+        this.approvedAt = null;
     }
 
-    /*
-     * MBR-010
-     * 조교 권한 조회
-     */
-    public RolePermissionsResponse getPermissions(
-            UUID spaceId,
-            UUID memberId,
-            User currentUser
-    ) {
-        SpaceMember actor =
-                getApprovedMember(
-                        spaceId,
-                        currentUser.getId()
-                );
-
-        SpaceMember target =
-                getMemberInSpace(
-                        spaceId,
-                        memberId
-                );
-
-        if (target.getStatus() != SpaceMemberStatus.APPROVED
-                || target.getRemovedAt() != null) {
-
-            throw new BusinessException(
-                    SpaceMemberErrorCode.MEMBER_NOT_FOUND
-            );
-        }
-
-        boolean professor =
-                actor.getRole()
-                        == SpaceMemberRole.PROFESSOR;
-
-        boolean sameAssistant =
-                actor.getId()
-                        .equals(target.getId())
-                        && actor.getRole()
-                        == SpaceMemberRole.ASSISTANT;
-
-        if (!professor
-                && !sameAssistant) {
-
-            throw new BusinessException(
-                    SpaceMemberErrorCode.PERMISSION_VIEW_FORBIDDEN
-            );
-        }
-
-        List<PermissionType> permissions =
-                permissionRepository
-                        .findAllBySpaceMemberId(
-                                target.getId()
-                        )
-                        .stream()
-                        .map(
-                                SpaceMemberPermission::getPermission
-                        )
-                        .sorted(
-                                Comparator.comparingInt(
-                                        PermissionType::ordinal
-                                )
-                        )
-                        .toList();
-
-        return new RolePermissionsResponse(
-                target.getId(),
-                target.getRole(),
-                permissions
-        );
+    public void remove(Instant now) {
+        this.removedAt = now;
     }
 
-    private List<SpaceMember> getPendingRequests(
-            UUID spaceId,
-            List<UUID> requestIds
-    ) {
-        List<SpaceMember> targets =
-                spaceMemberRepository
-                        .findAllById(
-                                requestIds
-                        );
-
-        if (targets.size()
-                != requestIds.size()) {
-
-            throw new BusinessException(
-                    SpaceMemberErrorCode.JOIN_REQUEST_NOT_FOUND
-            );
-        }
-
-        boolean invalid =
-                targets.stream()
-                        .anyMatch(member ->
-                                !member.getSpace()
-                                        .getId()
-                                        .equals(spaceId)
-                                        || member.getStatus()
-                                        != SpaceMemberStatus.PENDING
-                                        || member.getRemovedAt()
-                                        != null
-                        );
-
-        if (invalid) {
-
-            throw new BusinessException(
-                    SpaceMemberErrorCode.INVALID_JOIN_REQUEST
-            );
-        }
-
-        return targets;
+    public void updateRole(SpaceMemberRole role) {
+        this.role = role;
     }
 
-    private void requireMemberManagePermission(
-            UUID spaceId,
-            User currentUser
+    // 내보내진 학생이 다시 Space에 참가 신청할 때 사용
+    public void rejoin(
+            SpaceColorKey colorKey,
+            boolean autoApprove,
+            Instant now
     ) {
-        SpaceMember actor =
-                getApprovedMember(
-                        spaceId,
-                        currentUser.getId()
-                );
+        this.colorKey = colorKey;
+        this.role = SpaceMemberRole.STUDENT;
 
-        if (actor.getRole()
-                == SpaceMemberRole.PROFESSOR) {
+        this.status =
+                autoApprove
+                        ? SpaceMemberStatus.APPROVED
+                        : SpaceMemberStatus.PENDING;
 
-            return;
-        }
+        this.requestedAt = now;
 
-        if (actor.getRole()
-                == SpaceMemberRole.ASSISTANT
-                && hasMemberManagePermission(actor)) {
+        this.approvedAt =
+                autoApprove
+                        ? now
+                        : null;
 
-            return;
-        }
-
-        throw new BusinessException(
-                SpaceMemberErrorCode.MEMBER_MANAGE_FORBIDDEN
-        );
-    }
-
-    private boolean hasMemberManagePermission(
-            SpaceMember member
-    ) {
-        return permissionRepository
-                .existsBySpaceMemberIdAndPermission(
-                        member.getId(),
-                        PermissionType.MEMBER_MANAGE
-                );
-    }
-
-    private SpaceMember getApprovedMember(
-            UUID spaceId,
-            UUID userId
-    ) {
-        return spaceMemberRepository
-                .findBySpaceIdAndUserIdAndStatusAndRemovedAtIsNull(
-                        spaceId,
-                        userId,
-                        SpaceMemberStatus.APPROVED
-                )
-                .orElseThrow(() ->
-                        new BusinessException(
-                                SpaceMemberErrorCode.SPACE_ACCESS_DENIED
-                        )
-                );
-    }
-
-    private SpaceMember getMemberInSpace(
-            UUID spaceId,
-            UUID memberId
-    ) {
-        return spaceMemberRepository
-                .findByIdAndSpaceId(
-                        memberId,
-                        spaceId
-                )
-                .orElseThrow(() ->
-                        new BusinessException(
-                                SpaceMemberErrorCode.MEMBER_NOT_FOUND
-                        )
-                );
-    }
-
-    private Space getSpace(
-            UUID spaceId
-    ) {
-        return spaceRepository
-                .findById(
-                        spaceId
-                )
-                .orElseThrow(() ->
-                        new BusinessException(
-                                SpaceMemberErrorCode.SPACE_NOT_FOUND
-                        )
-                );
-    }
-
-    private int roleOrder(
-            SpaceMemberRole role
-    ) {
-        return switch (role) {
-            case PROFESSOR -> 0;
-            case ASSISTANT -> 1;
-            case STUDENT -> 2;
-        };
+        this.deniedAt = null;
+        this.removedAt = null;
+        this.lastAccessedAt = null;
     }
 }
