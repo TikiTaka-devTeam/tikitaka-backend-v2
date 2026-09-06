@@ -44,4 +44,22 @@ public class SpaceMemberPermission {
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
+
+    private SpaceMemberPermission(
+            SpaceMember spaceMember,
+            PermissionType permission
+    ) {
+        this.spaceMember = spaceMember;
+        this.permission = permission;
+    }
+
+    public static SpaceMemberPermission create(
+            SpaceMember spaceMember,
+            PermissionType permission
+    ) {
+        return new SpaceMemberPermission(
+                spaceMember,
+                permission
+        );
+    }
 }
