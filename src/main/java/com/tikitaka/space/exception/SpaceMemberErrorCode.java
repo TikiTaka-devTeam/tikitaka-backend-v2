@@ -49,8 +49,22 @@ public enum SpaceMemberErrorCode implements ErrorCode {
             HttpStatus.BAD_REQUEST,
             "MEMBER_CANNOT_REMOVE_PROFESSOR",
             "교수는 내보낼 수 없습니다."
+    ),
+    PROFESSOR_ROLE_CHANGE_FORBIDDEN(
+            HttpStatus.BAD_REQUEST,
+            "MEMBER_PROFESSOR_ROLE_CHANGE_FORBIDDEN",
+            "교수 역할은 변경할 수 없습니다."
+    ),
+    STUDENT_PERMISSION_NOT_ALLOWED(
+            HttpStatus.BAD_REQUEST,
+            "MEMBER_STUDENT_PERMISSION_NOT_ALLOWED",
+            "학생에게는 조교 권한을 설정할 수 없습니다."
+    ),
+    PERMISSION_VIEW_FORBIDDEN(
+            HttpStatus.FORBIDDEN,
+            "MEMBER_PERMISSION_VIEW_FORBIDDEN",
+            "조교 권한을 조회할 권한이 없습니다."
     );
-
 
     private final HttpStatus status;
     private final String code;
