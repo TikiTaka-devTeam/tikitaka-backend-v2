@@ -5,38 +5,52 @@ import java.util.UUID;
 
 import org.springframework.http.MediaType;
 import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.tikitaka.assignment.dto.request.AssignmentCreateRequest;
+import com.tikitaka.assignment.dto.request.AssignmentGradesRequest;
+import com.tikitaka.assignment.dto.request.AssignmentGradeUpdateRequest;
+import com.tikitaka.assignment.dto.request.AssignmentMaxScoreRequest;
+import com.tikitaka.assignment.dto.request.AssignmentUpdateRequest;
+import com.tikitaka.assignment.dto.response.AssignmentCloseResponse;
 import com.tikitaka.assignment.dto.response.AssignmentCreateResponse;
+import com.tikitaka.assignment.dto.response.AssignmentDeleteResponse;
 import com.tikitaka.assignment.dto.response.AssignmentDetailResponse;
+import com.tikitaka.assignment.dto.response.AssignmentGradesFinalizeResponse;
+import com.tikitaka.assignment.dto.response.AssignmentGradesSaveResponse;
+import com.tikitaka.assignment.dto.response.AssignmentGradeUpdateResponse;
 import com.tikitaka.assignment.dto.response.AssignmentListResponse;
+import com.tikitaka.assignment.dto.response.AssignmentMaxScoreResponse;
+import com.tikitaka.assignment.dto.response.AssignmentSubmissionDownloadResponse;
+import com.tikitaka.assignment.dto.response.AssignmentSubmissionListResponse;
+import com.tikitaka.assignment.dto.response.AssignmentSubmitResponse;
 import com.tikitaka.assignment.dto.response.AssignmentSummaryResponse;
+import com.tikitaka.assignment.dto.response.AssignmentUpdateResponse;
 import com.tikitaka.assignment.service.AssignmentService;
 import com.tikitaka.global.config.OpenApiConfig;
 import com.tikitaka.global.security.CurrentUserResolver;
 import com.tikitaka.user.entity.User;
 
 import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Encoding;
-import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
-
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 
-
 @Tag(
         name = "Assignment",
-        description = "Assignment 생성/조회 API"
+        description = "과제 관리 API"
 )
 @RestController
 @RequiredArgsConstructor
@@ -93,17 +107,21 @@ public class AssignmentController {
 
     @Operation(
             summary = "ASG-004 과제 등록",
-            requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(
-                    content = @Content(
-                            mediaType = MediaType.MULTIPART_FORM_DATA_VALUE,
-                            encoding = {
-                                    @Encoding(
-                                            name = "assignment_data",
-                                            contentType = MediaType.APPLICATION_JSON_VALUE
+            requestBody =
+                    @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                            content =
+                                    @Content(
+                                            mediaType =
+                                                    MediaType.MULTIPART_FORM_DATA_VALUE,
+                                            encoding = {
+                                                    @Encoding(
+                                                            name = "assignment_data",
+                                                            contentType =
+                                                                    MediaType.APPLICATION_JSON_VALUE
+                                                    )
+                                            }
                                     )
-                            }
                     )
-            )
     )
     @PostMapping(
             value = "/api/v1/spaces/{spaceId}/assignments",
@@ -116,16 +134,6 @@ public class AssignmentController {
             @RequestPart("assignment_data")
             AssignmentCreateRequest assignmentData,
 
-            @Parameter(
-                    description = "과제 첨부파일",
-                    content = @Content(
-                            mediaType = MediaType.APPLICATION_OCTET_STREAM_VALUE,
-                            schema = @Schema(
-                                    type = "string",
-                                    format = "binary"
-                            )
-                    )
-            )
             @RequestPart(
                     value = "files",
                     required = false
@@ -141,6 +149,262 @@ public class AssignmentController {
                 spaceId,
                 assignmentData,
                 files,
+                currentUser
+        );
+    }
+
+    @Operation(
+            summary = "ASG-005 과제 수정",
+            requestBody =
+                    @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                            content =
+                                    @Content(
+                                            mediaType =
+                                                    MediaType.MULTIPART_FORM_DATA_VALUE,
+                                            encoding = {
+                                                    @Encoding(
+                                                            name = "assignment_data",
+                                                            contentType =
+                                                                    MediaType.APPLICATION_JSON_VALUE
+                                                    )
+                                            }
+                                    )
+                    )
+    )
+    @PatchMapping(
+            value = "/api/v1/assignments/{assignmentId}",
+            consumes = MediaType.MULTIPART_FORM_DATA_VALUE
+    )
+    public AssignmentUpdateResponse updateAssignment(
+            @PathVariable UUID assignmentId,
+
+            @Valid
+            @RequestPart("assignment_data")
+            AssignmentUpdateRequest assignmentData,
+
+            @RequestPart(
+                    value = "new_files",
+                    required = false
+            )
+            List<MultipartFile> newFiles,
+
+            Authentication authentication
+    ) {
+        User currentUser =
+                currentUserResolver.resolve(authentication);
+
+        return assignmentService.updateAssignment(
+                assignmentId,
+                assignmentData,
+                newFiles,
+                currentUser
+        );
+    }
+
+    @Operation(summary = "ASG-006 과제 수동 마감")
+    @PatchMapping("/api/v1/assignments/{assignmentId}/close")
+    public AssignmentCloseResponse closeAssignment(
+            @PathVariable UUID assignmentId,
+            Authentication authentication
+    ) {
+        User currentUser =
+                currentUserResolver.resolve(authentication);
+
+        return assignmentService.closeAssignment(
+                assignmentId,
+                currentUser
+        );
+    }
+
+    @Operation(summary = "ASG-007 과제 삭제")
+    @DeleteMapping("/api/v1/assignments/{assignmentId}")
+    public AssignmentDeleteResponse deleteAssignment(
+            @PathVariable UUID assignmentId,
+            Authentication authentication
+    ) {
+        User currentUser =
+                currentUserResolver.resolve(authentication);
+
+        return assignmentService.deleteAssignment(
+                assignmentId,
+                currentUser
+        );
+    }
+
+    @Operation(summary = "ASG-008 과제 최초 제출")
+    @PostMapping(
+            value = "/api/v1/assignments/{assignmentId}/submissions",
+            consumes = MediaType.MULTIPART_FORM_DATA_VALUE
+    )
+    public AssignmentSubmitResponse submitAssignment(
+            @PathVariable UUID assignmentId,
+
+            @RequestPart(
+                    value = "comment",
+                    required = false
+            )
+            String comment,
+
+            @RequestPart(
+                    value = "files",
+                    required = false
+            )
+            List<MultipartFile> files,
+
+            Authentication authentication
+    ) {
+        User currentUser =
+                currentUserResolver.resolve(authentication);
+
+        return assignmentService.submitAssignment(
+                assignmentId,
+                comment,
+                files,
+                currentUser
+        );
+    }
+
+    @Operation(summary = "ASG-009 내 과제 제출 수정")
+    @PutMapping(
+            value = "/api/v1/assignments/{assignmentId}/submissions/me",
+            consumes = MediaType.MULTIPART_FORM_DATA_VALUE
+    )
+    public AssignmentSubmitResponse updateMySubmission(
+            @PathVariable UUID assignmentId,
+
+            @RequestPart(
+                    value = "comment",
+                    required = false
+            )
+            String comment,
+
+            @RequestPart(
+                    value = "files",
+                    required = false
+            )
+            List<MultipartFile> files,
+
+            Authentication authentication
+    ) {
+        User currentUser =
+                currentUserResolver.resolve(authentication);
+
+        return assignmentService.updateMySubmission(
+                assignmentId,
+                comment,
+                files,
+                currentUser
+        );
+    }
+
+    @Operation(summary = "ASG-010 학생 제출 현황 조회")
+    @GetMapping("/api/v1/assignments/{assignmentId}/submissions")
+    public AssignmentSubmissionListResponse getSubmissions(
+            @PathVariable UUID assignmentId,
+            Authentication authentication
+    ) {
+        User currentUser =
+                currentUserResolver.resolve(authentication);
+
+        return assignmentService.getSubmissions(
+                assignmentId,
+                currentUser
+        );
+    }
+
+    @Operation(summary = "ASG-011 제출물 일괄 다운로드")
+    @GetMapping("/api/v1/assignments/{assignmentId}/submissions/download")
+    public AssignmentSubmissionDownloadResponse downloadSubmissions(
+            @PathVariable UUID assignmentId,
+            Authentication authentication
+    ) {
+        User currentUser =
+                currentUserResolver.resolve(authentication);
+
+        return assignmentService.downloadSubmissions(
+                assignmentId,
+                currentUser
+        );
+    }
+
+    @Operation(summary = "ASG-012 과제 만점 설정")
+    @PatchMapping("/api/v1/assignments/{assignmentId}/max-score")
+    public AssignmentMaxScoreResponse updateMaxScore(
+            @PathVariable UUID assignmentId,
+
+            @Valid
+            @RequestBody
+            AssignmentMaxScoreRequest request,
+
+            Authentication authentication
+    ) {
+        User currentUser =
+                currentUserResolver.resolve(authentication);
+
+        return assignmentService.updateMaxScore(
+                assignmentId,
+                request,
+                currentUser
+        );
+    }
+
+    @Operation(summary = "ASG-013 성적 입력 및 임시 저장")
+    @PutMapping("/api/v1/assignments/{assignmentId}/grades")
+    public AssignmentGradesSaveResponse saveGrades(
+            @PathVariable UUID assignmentId,
+
+            @Valid
+            @RequestBody
+            AssignmentGradesRequest request,
+
+            Authentication authentication
+    ) {
+        User currentUser =
+                currentUserResolver.resolve(authentication);
+
+        return assignmentService.saveGrades(
+                assignmentId,
+                request,
+                currentUser
+        );
+    }
+
+    @Operation(summary = "ASG-014 성적 최종 등록")
+    @PostMapping("/api/v1/assignments/{assignmentId}/grades/finalize")
+    public AssignmentGradesFinalizeResponse finalizeGrades(
+            @PathVariable UUID assignmentId,
+            Authentication authentication
+    ) {
+        User currentUser =
+                currentUserResolver.resolve(authentication);
+
+        return assignmentService.finalizeGrades(
+                assignmentId,
+                currentUser
+        );
+    }
+
+    @Operation(summary = "ASG-015 공개 후 학생 성적 수정")
+    @PatchMapping(
+            "/api/v1/assignments/{assignmentId}/grades/{studentId}"
+    )
+    public AssignmentGradeUpdateResponse updateFinalizedGrade(
+            @PathVariable UUID assignmentId,
+            @PathVariable UUID studentId,
+
+            @Valid
+            @RequestBody
+            AssignmentGradeUpdateRequest request,
+
+            Authentication authentication
+    ) {
+        User currentUser =
+                currentUserResolver.resolve(authentication);
+
+        return assignmentService.updateFinalizedGrade(
+                assignmentId,
+                studentId,
+                request,
                 currentUser
         );
     }
