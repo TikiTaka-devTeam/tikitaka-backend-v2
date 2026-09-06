@@ -3,8 +3,11 @@ package com.tikitaka.assignment.service;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -22,6 +25,9 @@ import com.tikitaka.assignment.dto.response.AssignmentDetailResponse;
 import com.tikitaka.assignment.dto.response.AssignmentFileResponse;
 import com.tikitaka.assignment.dto.response.AssignmentListItemResponse;
 import com.tikitaka.assignment.dto.response.AssignmentListResponse;
+import com.tikitaka.assignment.dto.response.AssignmentSubmissionDownloadResponse;
+import com.tikitaka.assignment.dto.response.AssignmentSubmissionListItemResponse;
+import com.tikitaka.assignment.dto.response.AssignmentSubmissionListResponse;
 import com.tikitaka.assignment.dto.response.AssignmentSubmissionResponse;
 import com.tikitaka.assignment.dto.response.AssignmentSubmitResponse;
 import com.tikitaka.assignment.dto.response.AssignmentSummaryResponse;
@@ -39,6 +45,7 @@ import com.tikitaka.assignment.repository.AssignmentGradeRepository;
 import com.tikitaka.assignment.repository.AssignmentRepository;
 import com.tikitaka.assignment.repository.AssignmentSubmissionRepository;
 import com.tikitaka.assignment.repository.SubmissionFileRepository;
+import com.tikitaka.assignment.storage.AssignmentSubmissionArchiveStorage;
 import com.tikitaka.global.exception.BusinessException;
 import com.tikitaka.global.s3.FileUploadType;
 import com.tikitaka.global.s3.S3Service;
@@ -71,6 +78,7 @@ public class AssignmentService {
     private final SpaceMemberRepository spaceMemberRepository;
     private final SpaceMemberPermissionRepository spaceMemberPermissionRepository;
     private final S3Service s3Service;
+    private final AssignmentSubmissionArchiveStorage archiveStorage;
 
     // ASG-001
     public AssignmentListResponse getAssignments(
@@ -119,12 +127,15 @@ public class AssignmentService {
                                 spaceId
                         );
 
-        if (member.getRole() == SpaceMemberRole.STUDENT) {
+        if (member.getRole()
+                == SpaceMemberRole.STUDENT) {
 
             long notSubmittedCount =
                     assignments.stream()
                             .filter(assignment ->
-                                    !isClosed(assignment)
+                                    !isClosed(
+                                            assignment
+                                    )
                             )
                             .filter(assignment ->
                                     !assignmentSubmissionRepository
@@ -135,31 +146,37 @@ public class AssignmentService {
                             )
                             .count();
 
-            return AssignmentSummaryResponse.forStudent(
-                    notSubmittedCount
-            );
+            return AssignmentSummaryResponse
+                    .forStudent(
+                            notSubmittedCount
+                    );
         }
 
         long beforeDeadlineCount =
                 assignments.stream()
                         .filter(assignment ->
-                                !isClosed(assignment)
+                                !isClosed(
+                                        assignment
+                                )
                         )
                         .count();
 
         long gradingPendingCount =
                 assignments.stream()
-                        .filter(this::isClosed)
+                        .filter(
+                                this::isClosed
+                        )
                         .filter(assignment ->
                                 assignment.getGradingStatus()
                                         == GradingStatus.DRAFT
                         )
                         .count();
 
-        return AssignmentSummaryResponse.forManager(
-                beforeDeadlineCount,
-                gradingPendingCount
-        );
+        return AssignmentSummaryResponse
+                .forManager(
+                        beforeDeadlineCount,
+                        gradingPendingCount
+                );
     }
 
     // ASG-003
@@ -175,7 +192,9 @@ public class AssignmentService {
 
         SpaceMember member =
                 getApprovedMember(
-                        assignment.getSpace().getId(),
+                        assignment
+                                .getSpace()
+                                .getId(),
                         currentUser.getId()
                 );
 
@@ -187,13 +206,19 @@ public class AssignmentService {
                                 assignmentId
                         )
                         .stream()
-                        .map(AssignmentFileResponse::from)
+                        .map(
+                                AssignmentFileResponse::from
+                        )
                         .toList();
 
-        AssignmentSubmissionResponse mySubmission = null;
-        BigDecimal score = null;
+        AssignmentSubmissionResponse mySubmission =
+                null;
 
-        if (member.getRole() == SpaceMemberRole.STUDENT) {
+        BigDecimal score =
+                null;
+
+        if (member.getRole()
+                == SpaceMemberRole.STUDENT) {
 
             mySubmission =
                     assignmentSubmissionRepository
@@ -201,8 +226,12 @@ public class AssignmentService {
                                     assignmentId,
                                     currentUser.getId()
                             )
-                            .map(this::toSubmissionResponse)
-                            .orElse(null);
+                            .map(
+                                    this::toSubmissionResponse
+                            )
+                            .orElse(
+                                    null
+                            );
 
             if (assignment.getGradingStatus()
                     == GradingStatus.FINALIZED) {
@@ -213,8 +242,12 @@ public class AssignmentService {
                                         assignmentId,
                                         currentUser.getId()
                                 )
-                                .map(AssignmentGrade::getScore)
-                                .orElse(null);
+                                .map(
+                                        AssignmentGrade::getScore
+                                )
+                                .orElse(
+                                        null
+                                );
             }
         }
 
@@ -223,15 +256,20 @@ public class AssignmentService {
                 assignment.getTitle(),
                 assignment.getDescription(),
                 assignment.getCreatedAt(),
-                assignment.getSpace()
+                assignment
+                        .getSpace()
                         .getProfessor()
                         .getName(),
                 assignment.getViewCount(),
                 files,
                 assignment.getDueAt(),
-                statusOf(assignment),
+                statusOf(
+                        assignment
+                ),
                 mySubmission,
-                assignment.getGradingStatus().name(),
+                assignment
+                        .getGradingStatus()
+                        .name(),
                 score,
                 assignment.getMaxScore()
         );
@@ -247,10 +285,13 @@ public class AssignmentService {
     ) {
         Space space =
                 spaceRepository
-                        .findById(spaceId)
+                        .findById(
+                                spaceId
+                        )
                         .orElseThrow(() ->
                                 new BusinessException(
-                                        AssignmentErrorCode.SPACE_NOT_FOUND
+                                        AssignmentErrorCode
+                                                .SPACE_NOT_FOUND
                                 )
                         );
 
@@ -289,8 +330,12 @@ public class AssignmentService {
                 assignment.getTitle(),
                 assignment.getDescription(),
                 assignment.getDueAt(),
-                closeTypeOf(assignment),
-                statusOf(assignment),
+                closeTypeOf(
+                        assignment
+                ),
+                statusOf(
+                        assignment
+                ),
                 fileResponses
         );
     }
@@ -310,7 +355,9 @@ public class AssignmentService {
 
         SpaceMember member =
                 getApprovedMember(
-                        assignment.getSpace().getId(),
+                        assignment
+                                .getSpace()
+                                .getId(),
                         currentUser.getId()
                 );
 
@@ -341,7 +388,9 @@ public class AssignmentService {
                                 assignmentId
                         )
                         .stream()
-                        .map(AssignmentFileResponse::from)
+                        .map(
+                                AssignmentFileResponse::from
+                        )
                         .toList();
 
         return new AssignmentUpdateResponse(
@@ -349,8 +398,12 @@ public class AssignmentService {
                 assignment.getTitle(),
                 assignment.getDescription(),
                 assignment.getDueAt(),
-                closeTypeOf(assignment),
-                statusOf(assignment),
+                closeTypeOf(
+                        assignment
+                ),
+                statusOf(
+                        assignment
+                ),
                 files
         );
     }
@@ -368,7 +421,9 @@ public class AssignmentService {
 
         SpaceMember member =
                 getApprovedMember(
-                        assignment.getSpace().getId(),
+                        assignment
+                                .getSpace()
+                                .getId(),
                         currentUser.getId()
                 );
 
@@ -399,7 +454,9 @@ public class AssignmentService {
 
         SpaceMember member =
                 getApprovedMember(
-                        assignment.getSpace().getId(),
+                        assignment
+                                .getSpace()
+                                .getId(),
                         currentUser.getId()
                 );
 
@@ -430,7 +487,9 @@ public class AssignmentService {
 
         SpaceMember member =
                 getApprovedMember(
-                        assignment.getSpace().getId(),
+                        assignment
+                                .getSpace()
+                                .getId(),
                         currentUser.getId()
                 );
 
@@ -498,7 +557,9 @@ public class AssignmentService {
 
         SpaceMember member =
                 getApprovedMember(
-                        assignment.getSpace().getId(),
+                        assignment
+                                .getSpace()
+                                .getId(),
                         currentUser.getId()
                 );
 
@@ -549,11 +610,219 @@ public class AssignmentService {
         );
     }
 
+    // ASG-010
+    public AssignmentSubmissionListResponse getSubmissions(
+            UUID assignmentId,
+            User currentUser
+    ) {
+        Assignment assignment =
+                getActiveAssignment(
+                        assignmentId
+                );
+
+        SpaceMember actor =
+                getApprovedMember(
+                        assignment
+                                .getSpace()
+                                .getId(),
+                        currentUser.getId()
+                );
+
+        validateAssignmentManager(
+                actor
+        );
+
+        List<SpaceMember> students =
+                spaceMemberRepository
+                        .findAllBySpaceIdAndStatusAndRemovedAtIsNull(
+                                assignment
+                                        .getSpace()
+                                        .getId(),
+                                SpaceMemberStatus.APPROVED
+                        )
+                        .stream()
+                        .filter(member ->
+                                member.getRole()
+                                        == SpaceMemberRole.STUDENT
+                        )
+                        .sorted(
+                                Comparator
+                                        .comparing(
+                                                (SpaceMember member) ->
+                                                        member.getUser()
+                                                                .getMemberIdNumber()
+                                        )
+                                        .thenComparing(member ->
+                                                member.getUser()
+                                                        .getName()
+                                        )
+                        )
+                        .toList();
+
+        Map<UUID, AssignmentSubmission> submissionByStudentId =
+                assignmentSubmissionRepository
+                        .findAllByAssignmentId(
+                                assignmentId
+                        )
+                        .stream()
+                        .collect(
+                                Collectors.toMap(
+                                        submission ->
+                                                submission
+                                                        .getStudent()
+                                                        .getId(),
+                                        submission ->
+                                                submission
+                                )
+                        );
+
+        Map<UUID, AssignmentGrade> gradeByStudentId =
+                assignmentGradeRepository
+                        .findAllByAssignmentId(
+                                assignmentId
+                        )
+                        .stream()
+                        .collect(
+                                Collectors.toMap(
+                                        grade ->
+                                                grade
+                                                        .getStudent()
+                                                        .getId(),
+                                        grade ->
+                                                grade
+                                )
+                        );
+
+        Map<UUID, List<SubmissionFile>> filesBySubmissionId =
+                submissionFileRepository
+                        .findAllBySubmissionAssignmentId(
+                                assignmentId
+                        )
+                        .stream()
+                        .collect(
+                                Collectors.groupingBy(
+                                        file ->
+                                                file
+                                                        .getSubmission()
+                                                        .getId()
+                                )
+                        );
+
+        List<AssignmentSubmissionListItemResponse> responses =
+                students.stream()
+                        .map(studentMember -> {
+
+                            User student =
+                                    studentMember.getUser();
+
+                            AssignmentSubmission submission =
+                                    submissionByStudentId.get(
+                                            student.getId()
+                                    );
+
+                            AssignmentGrade grade =
+                                    gradeByStudentId.get(
+                                            student.getId()
+                                    );
+
+                            if (submission == null) {
+
+                                return new AssignmentSubmissionListItemResponse(
+                                        student.getId(),
+                                        student.getName(),
+                                        student.getMemberIdNumber(),
+                                        "NOT_SUBMITTED",
+                                        List.of(),
+                                        null,
+                                        grade == null
+                                                ? null
+                                                : grade.getScore()
+                                );
+                            }
+
+                            List<AssignmentFileResponse> files =
+                                    filesBySubmissionId
+                                            .getOrDefault(
+                                                    submission.getId(),
+                                                    List.of()
+                                            )
+                                            .stream()
+                                            .map(
+                                                    AssignmentFileResponse::from
+                                            )
+                                            .toList();
+
+                            return new AssignmentSubmissionListItemResponse(
+                                    student.getId(),
+                                    student.getName(),
+                                    student.getMemberIdNumber(),
+                                    submission
+                                            .getStatus()
+                                            .name(),
+                                    files,
+                                    submission.getSubmittedAt(),
+                                    grade == null
+                                            ? null
+                                            : grade.getScore()
+                            );
+                        })
+                        .toList();
+
+        return new AssignmentSubmissionListResponse(
+                assignment.getId(),
+                assignment.getMaxScore(),
+                assignment
+                        .getGradingStatus()
+                        .name(),
+                responses
+        );
+    }
+
+    // ASG-011
+    public AssignmentSubmissionDownloadResponse downloadSubmissions(
+            UUID assignmentId,
+            User currentUser
+    ) {
+        Assignment assignment =
+                getActiveAssignment(
+                        assignmentId
+                );
+
+        SpaceMember actor =
+                getApprovedMember(
+                        assignment
+                                .getSpace()
+                                .getId(),
+                        currentUser.getId()
+                );
+
+        validateAssignmentManager(
+                actor
+        );
+
+        List<SubmissionFile> submissionFiles =
+                submissionFileRepository
+                        .findAllBySubmissionAssignmentId(
+                                assignmentId
+                        );
+
+        String downloadUrl =
+                archiveStorage.createArchive(
+                        assignmentId,
+                        submissionFiles
+                );
+
+        return new AssignmentSubmissionDownloadResponse(
+                downloadUrl
+        );
+    }
+
     private AssignmentListItemResponse toListItem(
             Assignment assignment,
             SpaceMember member
     ) {
-        String submissionStatus = null;
+        String submissionStatus =
+                null;
 
         if (member.getRole()
                 == SpaceMemberRole.STUDENT) {
@@ -562,7 +831,9 @@ public class AssignmentService {
                     assignmentSubmissionRepository
                             .findByAssignmentIdAndStudentId(
                                     assignment.getId(),
-                                    member.getUser().getId()
+                                    member
+                                            .getUser()
+                                            .getId()
                             )
                             .map(submission ->
                                     submission
@@ -581,7 +852,9 @@ public class AssignmentService {
                         assignment.getDescription()
                 ),
                 assignment.getDueAt(),
-                statusOf(assignment),
+                statusOf(
+                        assignment
+                ),
                 submissionStatus
         );
     }
@@ -595,14 +868,18 @@ public class AssignmentService {
                                 submission.getId()
                         )
                         .stream()
-                        .map(AssignmentFileResponse::from)
+                        .map(
+                                AssignmentFileResponse::from
+                        )
                         .toList();
 
         return new AssignmentSubmissionResponse(
                 submission.getId(),
                 submission.getComment(),
                 files,
-                submission.getStatus().name(),
+                submission
+                        .getStatus()
+                        .name(),
                 submission.getSubmittedAt()
         );
     }
@@ -611,7 +888,9 @@ public class AssignmentService {
             Assignment assignment,
             List<MultipartFile> files
     ) {
-        if (files == null || files.isEmpty()) {
+        if (files == null
+                || files.isEmpty()) {
+
             return List.of();
         }
 
@@ -665,7 +944,9 @@ public class AssignmentService {
                         entities
                 )
                 .stream()
-                .map(AssignmentFileResponse::from)
+                .map(
+                        AssignmentFileResponse::from
+                )
                 .toList();
     }
 
@@ -673,7 +954,9 @@ public class AssignmentService {
             AssignmentSubmission submission,
             List<MultipartFile> files
     ) {
-        if (files == null || files.isEmpty()) {
+        if (files == null
+                || files.isEmpty()) {
+
             return List.of();
         }
 
@@ -731,7 +1014,9 @@ public class AssignmentService {
                         entities
                 )
                 .stream()
-                .map(AssignmentFileResponse::from)
+                .map(
+                        AssignmentFileResponse::from
+                )
                 .toList();
     }
 
@@ -776,7 +1061,9 @@ public class AssignmentService {
 
         Set<UUID> existingFileIds =
                 existingFiles.stream()
-                        .map(AssignmentFile::getId)
+                        .map(
+                                AssignmentFile::getId
+                        )
                         .collect(
                                 Collectors.toSet()
                         );
@@ -795,6 +1082,7 @@ public class AssignmentService {
                         );
 
         if (containsInvalidFileId) {
+
             throw new BusinessException(
                     AssignmentErrorCode
                             .ASSIGNMENT_FILE_NOT_FOUND
@@ -818,9 +1106,10 @@ public class AssignmentService {
             );
         }
 
-        assignmentFileRepository.deleteAll(
-                filesToDelete
-        );
+        assignmentFileRepository
+                .deleteAll(
+                        filesToDelete
+                );
 
         assignmentFileRepository.flush();
     }
@@ -866,6 +1155,7 @@ public class AssignmentService {
     ) {
         if (member.getRole()
                 == SpaceMemberRole.PROFESSOR) {
+
             return;
         }
 
@@ -877,6 +1167,7 @@ public class AssignmentService {
                                 PermissionType
                                         .ASSIGNMENT_MANAGE
                         )) {
+
             return;
         }
 
@@ -891,18 +1182,23 @@ public class AssignmentService {
     ) {
         if (member.getRole()
                 == SpaceMemberRole.STUDENT) {
+
             return;
         }
 
         throw new BusinessException(
-                AssignmentErrorCode.STUDENT_ONLY
+                AssignmentErrorCode
+                        .STUDENT_ONLY
         );
     }
 
     private void validateAssignmentOpen(
             Assignment assignment
     ) {
-        if (isClosed(assignment)) {
+        if (isClosed(
+                assignment
+        )) {
+
             throw new BusinessException(
                     AssignmentErrorCode
                             .ASSIGNMENT_CLOSED
@@ -927,7 +1223,9 @@ public class AssignmentService {
     private String statusOf(
             Assignment assignment
     ) {
-        return isClosed(assignment)
+        return isClosed(
+                assignment
+        )
                 ? "CLOSED"
                 : "OPEN";
     }
@@ -957,6 +1255,7 @@ public class AssignmentService {
 
         if (normalized.length()
                 <= PREVIEW_LENGTH) {
+
             return normalized;
         }
 

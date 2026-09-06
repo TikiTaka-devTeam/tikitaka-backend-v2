@@ -22,6 +22,8 @@ import com.tikitaka.assignment.dto.response.AssignmentCreateResponse;
 import com.tikitaka.assignment.dto.response.AssignmentDeleteResponse;
 import com.tikitaka.assignment.dto.response.AssignmentDetailResponse;
 import com.tikitaka.assignment.dto.response.AssignmentListResponse;
+import com.tikitaka.assignment.dto.response.AssignmentSubmissionDownloadResponse;
+import com.tikitaka.assignment.dto.response.AssignmentSubmissionListResponse;
 import com.tikitaka.assignment.dto.response.AssignmentSubmitResponse;
 import com.tikitaka.assignment.dto.response.AssignmentSummaryResponse;
 import com.tikitaka.assignment.dto.response.AssignmentUpdateResponse;
@@ -31,10 +33,8 @@ import com.tikitaka.global.security.CurrentUserResolver;
 import com.tikitaka.user.entity.User;
 
 import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Encoding;
-import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -42,7 +42,7 @@ import lombok.RequiredArgsConstructor;
 
 @Tag(
         name = "Assignment",
-        description = "Assignment 생성/조회/수정/삭제/제출 API"
+        description = "Assignment 생성/조회/수정/삭제/제출/채점 API"
 )
 @RestController
 @RequiredArgsConstructor
@@ -52,9 +52,7 @@ public class AssignmentController {
     private final AssignmentService assignmentService;
     private final CurrentUserResolver currentUserResolver;
 
-    @Operation(
-            summary = "ASG-001 과제 목록 조회"
-    )
+    @Operation(summary = "ASG-001 과제 목록 조회")
     @GetMapping(
             "/api/v1/spaces/{spaceId}/assignments"
     )
@@ -73,9 +71,7 @@ public class AssignmentController {
         );
     }
 
-    @Operation(
-            summary = "ASG-002 과제 현황 요약 조회"
-    )
+    @Operation(summary = "ASG-002 과제 현황 요약 조회")
     @GetMapping(
             "/api/v1/spaces/{spaceId}/assignments/summary"
     )
@@ -95,9 +91,7 @@ public class AssignmentController {
                 );
     }
 
-    @Operation(
-            summary = "ASG-003 과제 상세 조회"
-    )
+    @Operation(summary = "ASG-003 과제 상세 조회")
     @GetMapping(
             "/api/v1/assignments/{assignmentId}"
     )
@@ -147,19 +141,6 @@ public class AssignmentController {
             @RequestPart("assignment_data")
             AssignmentCreateRequest assignmentData,
 
-            @Parameter(
-                    description = "과제 첨부파일",
-                    content =
-                            @Content(
-                                    mediaType =
-                                            MediaType.APPLICATION_OCTET_STREAM_VALUE,
-                                    schema =
-                                            @Schema(
-                                                    type = "string",
-                                                    format = "binary"
-                                            )
-                            )
-            )
             @RequestPart(
                     value = "files",
                     required = false
@@ -233,9 +214,7 @@ public class AssignmentController {
         );
     }
 
-    @Operation(
-            summary = "ASG-006 과제 수동 마감"
-    )
+    @Operation(summary = "ASG-006 과제 수동 마감")
     @PatchMapping(
             "/api/v1/assignments/{assignmentId}/close"
     )
@@ -254,9 +233,7 @@ public class AssignmentController {
         );
     }
 
-    @Operation(
-            summary = "ASG-007 과제 삭제"
-    )
+    @Operation(summary = "ASG-007 과제 삭제")
     @DeleteMapping(
             "/api/v1/assignments/{assignmentId}"
     )
@@ -275,9 +252,7 @@ public class AssignmentController {
         );
     }
 
-    @Operation(
-            summary = "ASG-008 과제 최초 제출"
-    )
+    @Operation(summary = "ASG-008 과제 최초 제출")
     @PostMapping(
             value =
                     "/api/v1/assignments/{assignmentId}/submissions",
@@ -314,9 +289,7 @@ public class AssignmentController {
         );
     }
 
-    @Operation(
-            summary = "ASG-009 내 과제 제출 수정"
-    )
+    @Operation(summary = "ASG-009 내 과제 제출 수정")
     @PutMapping(
             value =
                     "/api/v1/assignments/{assignmentId}/submissions/me",
@@ -349,6 +322,48 @@ public class AssignmentController {
                 assignmentId,
                 comment,
                 files,
+                currentUser
+        );
+    }
+
+    @Operation(
+            summary = "ASG-010 학생 제출 현황 조회"
+    )
+    @GetMapping(
+            "/api/v1/assignments/{assignmentId}/submissions"
+    )
+    public AssignmentSubmissionListResponse getSubmissions(
+            @PathVariable UUID assignmentId,
+            Authentication authentication
+    ) {
+        User currentUser =
+                currentUserResolver.resolve(
+                        authentication
+                );
+
+        return assignmentService.getSubmissions(
+                assignmentId,
+                currentUser
+        );
+    }
+
+    @Operation(
+            summary = "ASG-011 제출물 일괄 다운로드"
+    )
+    @GetMapping(
+            "/api/v1/assignments/{assignmentId}/submissions/download"
+    )
+    public AssignmentSubmissionDownloadResponse downloadSubmissions(
+            @PathVariable UUID assignmentId,
+            Authentication authentication
+    ) {
+        User currentUser =
+                currentUserResolver.resolve(
+                        authentication
+                );
+
+        return assignmentService.downloadSubmissions(
+                assignmentId,
                 currentUser
         );
     }
