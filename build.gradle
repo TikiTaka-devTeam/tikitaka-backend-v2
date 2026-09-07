@@ -29,6 +29,9 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-websocket' // WebSocket 실시간 양방향 통신
 	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.3'
 	implementation 'com.solapi:sdk:1.0.3'
+	implementation 'nl.martijndwars:web-push:5.1.2' // Web Push(VAPID) 전송
+	implementation 'org.bouncycastle:bcprov-jdk18on:1.85.2' // Web Push 암호화 Provider
+	implementation 'org.apache.httpcomponents:httpcore:4.4.16' // Web Push 응답 타입
 	implementation 'io.jsonwebtoken:jjwt-api:0.13.0'
 	runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.13.0'
 	runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.13.0'
