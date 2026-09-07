@@ -1,5 +1,16 @@
 package com.tikitaka.push.controller;
 
+import java.util.UUID;
+
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
 import com.tikitaka.global.config.OpenApiConfig;
 import com.tikitaka.global.security.CurrentUserResolver;
 import com.tikitaka.push.dto.request.PushSubscriptionRequest;
@@ -7,25 +18,23 @@ import com.tikitaka.push.dto.response.PushDeleteResponse;
 import com.tikitaka.push.dto.response.PushSubscriptionResponse;
 import com.tikitaka.push.dto.response.VapidPublicKeyResponse;
 import com.tikitaka.push.service.PushSubscriptionService;
-import com.tikitaka.user.entity.User;
+import com.tikitaka.push.service.WebPushService;
+
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.core.Authentication;
-import org.springframework.web.bind.annotation.*;
-
-import java.util.UUID;
 
 @Tag(name = "Push", description = "Web Push 구독 및 VAPID 키 API")
 @RestController
-@RequestMapping("/api/v1/push")
 @RequiredArgsConstructor
+@RequestMapping("/api/v1/push")
 @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
 public class PushController {
 
     private final PushSubscriptionService pushSubscriptionService;
+    private final WebPushService webPushService;
     private final CurrentUserResolver currentUserResolver;
 
     @Operation(
@@ -34,7 +43,9 @@ public class PushController {
     )
     @GetMapping("/vapid-public-key")
     public VapidPublicKeyResponse getVapidPublicKey() {
-        return pushSubscriptionService.getVapidPublicKey();
+        return new VapidPublicKeyResponse(
+                webPushService.getPublicKey()
+        );
     }
 
     @Operation(
@@ -46,11 +57,9 @@ public class PushController {
             @Valid @RequestBody PushSubscriptionRequest request,
             Authentication authentication
     ) {
-        User currentUser = currentUserResolver.resolve(authentication);
-
         return pushSubscriptionService.subscribe(
-                currentUser.getId(),
-                request
+                request,
+                currentUserResolver.resolve(authentication)
         );
     }
 
@@ -63,11 +72,9 @@ public class PushController {
             @PathVariable UUID subscriptionId,
             Authentication authentication
     ) {
-        User currentUser = currentUserResolver.resolve(authentication);
-
         return pushSubscriptionService.unsubscribe(
-                currentUser.getId(),
-                subscriptionId
+                subscriptionId,
+                currentUserResolver.resolve(authentication)
         );
     }
 }
