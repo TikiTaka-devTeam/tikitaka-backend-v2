@@ -8,6 +8,8 @@ import java.util.UUID;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import com.tikitaka.global.common.cursor.CursorCodec;
 import com.tikitaka.global.exception.BusinessException;
@@ -19,6 +21,8 @@ import com.tikitaka.notification.entity.Notification;
 import com.tikitaka.notification.entity.NotificationType;
 import com.tikitaka.notification.exception.NotificationErrorCode;
 import com.tikitaka.notification.repository.NotificationRepository;
+import com.tikitaka.push.dto.response.WebPushPayload;
+import com.tikitaka.push.service.WebPushService;
 import com.tikitaka.space.entity.PermissionType;
 import com.tikitaka.space.entity.Space;
 import com.tikitaka.space.entity.SpaceMember;
@@ -43,6 +47,7 @@ public class NotificationService {
     private final SpaceMemberRepository spaceMemberRepository;
     private final SpaceMemberPermissionRepository permissionRepository;
     private final CursorCodec cursorCodec;
+    private final WebPushService webPushService;
 
     // NTF-001
     public NotificationListResponse getNotifications(
@@ -306,7 +311,7 @@ public class NotificationService {
             return;
         }
 
-        notificationRepository.save(
+        Notification notification = notificationRepository.save(
                 Notification.create(
                         user,
                         space,
@@ -314,6 +319,33 @@ public class NotificationService {
                         message,
                         targetId
                 )
+        );
+
+        sendPushAfterCommit(
+                user.getId(),
+                WebPushPayload.from(notification)
+        );
+    }
+
+    private void sendPushAfterCommit(
+            UUID userId,
+            WebPushPayload payload
+    ) {
+        Runnable pushTask = () ->
+                webPushService.sendToUser(userId, payload);
+
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            pushTask.run();
+            return;
+        }
+
+        TransactionSynchronizationManager.registerSynchronization(
+                new TransactionSynchronization() {
+                    @Override
+                    public void afterCommit() {
+                        pushTask.run();
+                    }
+                }
         );
     }
 
