@@ -24,6 +24,7 @@ import com.tikitaka.document.dto.request.RevisionPreviewVersionRequest;
 import com.tikitaka.document.dto.response.RevisionOperationResponse;
 import com.tikitaka.document.dto.response.RevisionUndoRedoResponse;
 import com.tikitaka.document.dto.response.DocumentRevisionCancelResponse;
+import com.tikitaka.document.dto.response.DocumentRevisionCompleteResponse;
 import com.tikitaka.document.entity.Document;
 import com.tikitaka.document.entity.DocumentRevision;
 import com.tikitaka.document.entity.RevisionOperationState;
@@ -72,6 +73,7 @@ public class DocumentRevisionService {
     private final S3FileValidator fileValidator;
     private final PdfProcessor pdfProcessor;
     private final DocumentStorage storage;
+    private final DocumentRevisionCompletionWorker completionWorker;
 
     @Transactional
     public DocumentRevisionCreateResponse createRevision(UUID documentId, User user) {
@@ -167,6 +169,20 @@ public class DocumentRevisionService {
         RevisionOperation operation = revisionOperationRepository.findFirstByRevisionIdAndStateAndSequenceGreaterThanOrderBySequenceAsc(revisionId, RevisionOperationState.UNDONE, cursor).orElseThrow(() -> new BusinessException(DocumentErrorCode.REVISION_NOT_EDITABLE));
         applyForward(operation); operation.redo(); revision.moveOperationCursorTo(operation.getSequence()); revision.increasePreviewVersion();
         return undoRedoResponse(revision, operation);
+    }
+
+    @Transactional
+    public DocumentRevisionCompleteResponse complete(UUID documentId, UUID revisionId, RevisionPreviewVersionRequest request, User user) {
+        DocumentRevision revision = lockedEditableRevision(documentId, revisionId, user);
+        validatePreviewVersion(revision, request.basePreviewVersion());
+        if (!revision.getBaseDocumentVersion().equals(revision.getDocument().getVersion())) {
+            throw new BusinessException(DocumentErrorCode.DOCUMENT_VERSION_CONFLICT);
+        }
+        revision.startProcessing();
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override public void afterCommit() { completionWorker.completeAsync(revision.getId()); }
+        });
+        return DocumentRevisionCompleteResponse.processing(revision);
     }
 
     @Transactional

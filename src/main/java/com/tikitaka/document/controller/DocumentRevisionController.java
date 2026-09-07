@@ -18,6 +18,7 @@ import org.springframework.web.multipart.MultipartFile;
 import com.tikitaka.document.dto.request.RevisionOperationRequest;
 import com.tikitaka.document.dto.request.RevisionPreviewVersionRequest;
 import com.tikitaka.document.dto.response.DocumentRevisionCancelResponse;
+import com.tikitaka.document.dto.response.DocumentRevisionCompleteResponse;
 import com.tikitaka.document.dto.response.DocumentRevisionCreateResponse;
 import com.tikitaka.document.dto.response.DocumentRevisionDetailResponse;
 import com.tikitaka.document.dto.response.DocumentSlidesResponse;
@@ -87,6 +88,14 @@ public class DocumentRevisionController {
     public RevisionUndoRedoResponse redoRevisionOperation(@PathVariable UUID documentId, @PathVariable UUID revisionId,
             @RequestBody RevisionPreviewVersionRequest request, Authentication authentication) {
         return documentRevisionService.redo(documentId, revisionId, request, currentUserResolver.resolve(authentication));
+    }
+
+    @Operation(summary = "MAT-012 강의자료 수정 완료", description = "최종 RevisionPage 상태를 비동기로 실제 PDF와 Slide 구성에 반영합니다.")
+    @PostMapping("/api/v1/documents/{documentId}/revisions/{revisionId}/complete")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public DocumentRevisionCompleteResponse completeRevision(@PathVariable UUID documentId, @PathVariable UUID revisionId,
+            @RequestBody RevisionPreviewVersionRequest request, Authentication authentication) {
+        return documentRevisionService.complete(documentId, revisionId, request, currentUserResolver.resolve(authentication));
     }
 
     @Operation(summary = "MAT-013 수정 세션 삭제", description = "수정 세션과 임시 파일을 정리하며 실제 강의자료에는 변경을 반영하지 않습니다.")
