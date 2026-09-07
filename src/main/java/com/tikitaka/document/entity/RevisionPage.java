@@ -50,4 +50,65 @@ public class RevisionPage extends BaseTimeEntity {
 
     @Column(name = "thumbnail_key", nullable = false, columnDefinition = "TEXT")
     private String thumbnailKey;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private RevisionPageStatus status = RevisionPageStatus.ACTIVE;
+
+    private RevisionPage(
+            DocumentRevision revision,
+            Integer position,
+            RevisionSourceType sourceType,
+            Slide originalSlide,
+            RevisionSlide revisionSlide,
+            String thumbnailKey
+    ) {
+        this.revision = revision;
+        this.position = position;
+        this.sourceType = sourceType;
+        this.originalSlide = originalSlide;
+        this.revisionSlide = revisionSlide;
+        this.thumbnailKey = thumbnailKey;
+        this.status = RevisionPageStatus.ACTIVE;
+    }
+
+    public static RevisionPage original(
+            DocumentRevision revision,
+            Integer position,
+            Slide originalSlide
+    ) {
+        return new RevisionPage(
+                revision,
+                position,
+                RevisionSourceType.ORIGINAL,
+                originalSlide,
+                null,
+                originalSlide.getThumbnailKey());
+    }
+
+    public static RevisionPage revision(
+            DocumentRevision revision,
+            Integer position,
+            RevisionSlide revisionSlide
+    ) {
+        return new RevisionPage(
+                revision,
+                position,
+                RevisionSourceType.REVISION,
+                null,
+                revisionSlide,
+                revisionSlide.getThumbnailKey());
+    }
+
+    public void changePosition(Integer position) {
+        this.position = position;
+    }
+
+    public void markDeletePending() {
+        this.status = RevisionPageStatus.DELETE_PENDING;
+    }
+
+    public void reactivate() {
+        this.status = RevisionPageStatus.ACTIVE;
+    }
 }

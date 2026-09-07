@@ -43,7 +43,10 @@ public class DocumentRevision extends BaseTimeEntity {
     private Integer baseDocumentVersion;
 
     @Column(name = "preview_version", nullable = false)
-    private Integer previewVersion = 1;
+    private Integer previewVersion = 0;
+
+    @Column(name = "operation_cursor_sequence")
+    private Integer operationCursorSequence;
 
     @Column(name = "source_file_name", length = 255)
     private String sourceFileName;
@@ -68,7 +71,8 @@ public class DocumentRevision extends BaseTimeEntity {
         this.document = document;
         this.editor = editor;
         this.baseDocumentVersion = document.getVersion();
-        this.previewVersion = 1;
+        this.previewVersion = 0;
+        this.operationCursorSequence = null;
         this.status = RevisionStatus.EDITING;
     }
 
@@ -93,6 +97,10 @@ public class DocumentRevision extends BaseTimeEntity {
         this.previewVersion++;
     }
 
+    public void moveOperationCursorTo(Integer sequence) {
+        this.operationCursorSequence = sequence;
+    }
+
     public void startProcessing() {
         this.status = RevisionStatus.PROCESSING;
     }
@@ -100,6 +108,10 @@ public class DocumentRevision extends BaseTimeEntity {
     public void complete() {
         this.status = RevisionStatus.COMPLETED;
         this.completedAt = Instant.now();
+    }
+
+    public void fail() {
+        this.status = RevisionStatus.FAILED;
     }
 
     public void cancel() {
