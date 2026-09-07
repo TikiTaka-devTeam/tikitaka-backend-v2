@@ -12,6 +12,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import com.tikitaka.notification.entity.Notification;
+import com.tikitaka.notification.entity.NotificationType;
 
 public interface NotificationRepository extends JpaRepository<Notification, UUID> {
 
@@ -88,6 +89,12 @@ public interface NotificationRepository extends JpaRepository<Notification, UUID
     );
 
     Optional<Notification> findByIdAndUserId(UUID id, UUID userId);
+
+    boolean existsByUserIdAndTypeAndTargetId(
+            UUID userId,
+            NotificationType type,
+            UUID targetId
+    );
 
     @Modifying(clearAutomatically = true)
     @Query("""
