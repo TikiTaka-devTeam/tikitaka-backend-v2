@@ -56,6 +56,7 @@ import com.tikitaka.assignment.repository.AssignmentRepository;
 import com.tikitaka.assignment.repository.AssignmentSubmissionRepository;
 import com.tikitaka.assignment.repository.SubmissionFileRepository;
 import com.tikitaka.assignment.storage.AssignmentSubmissionArchiveStorage;
+import com.tikitaka.notification.service.NotificationService;
 import com.tikitaka.global.exception.BusinessException;
 import com.tikitaka.global.s3.FileUploadType;
 import com.tikitaka.global.s3.S3Service;
@@ -89,6 +90,7 @@ public class AssignmentService {
     private final SpaceMemberPermissionRepository spaceMemberPermissionRepository;
     private final S3Service s3Service;
     private final AssignmentSubmissionArchiveStorage archiveStorage;
+    private final NotificationService notificationService;
 
     // ASG-001
     public AssignmentListResponse getAssignments(
@@ -406,6 +408,11 @@ public class AssignmentService {
 
         if (!assignment.isClosed()) {
             assignment.close();
+
+            notificationService.createAssignmentClosedNotification(
+                    assignment.getSpace(),
+                    assignment.getId()
+            );
         }
 
         return new AssignmentCloseResponse(
