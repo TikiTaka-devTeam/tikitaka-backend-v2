@@ -133,5 +133,5 @@ oauth:
 
 document:
   revision:
-    inactivity-timeout: ${DOCUMENT_REVISION_INACTIVITY_TIMEOUT:PT2H}
+    inactivity-timeout: ${DOCUMENT_REVISION_INACTIVITY_TIMEOUT:PT30M}
     cleanup-fixed-delay: ${DOCUMENT_REVISION_CLEANUP_FIXED_DELAY:PT5M}
