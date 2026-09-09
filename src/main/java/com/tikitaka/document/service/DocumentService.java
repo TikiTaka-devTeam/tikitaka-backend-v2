@@ -148,8 +148,7 @@ public class DocumentService {
                 .map(slide -> new DocumentSlideResponse(
                         slide.getId(),
                         slide.getPageNumber(),
-                        slide.getStatus(),
-                        storage.presignedGetUrl(slide.getThumbnailKey())))
+                        slide.getStatus()))
                 .toList();
 
         return new DocumentSlidesResponse(
