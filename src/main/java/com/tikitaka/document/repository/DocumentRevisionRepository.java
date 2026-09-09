@@ -1,6 +1,7 @@
 package com.tikitaka.document.repository;
 
 import java.util.List;
+import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -29,6 +30,17 @@ public interface DocumentRevisionRepository
     boolean existsByDocumentIdAndStatusIn(
             UUID documentId,
             List<RevisionStatus> statuses
+    );
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select revision from DocumentRevision revision
+            where revision.status = :status
+              and revision.updatedAt < :updatedBefore
+            """)
+    List<DocumentRevision> findAllInactiveForUpdate(
+            @Param("status") RevisionStatus status,
+            @Param("updatedBefore") Instant updatedBefore
     );
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)

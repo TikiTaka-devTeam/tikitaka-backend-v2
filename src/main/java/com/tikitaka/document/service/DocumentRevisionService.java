@@ -1,11 +1,15 @@
 package com.tikitaka.document.service;
 
 import java.util.ArrayList;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import java.util.Map;
 
 import org.springframework.http.MediaType;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -75,6 +79,9 @@ public class DocumentRevisionService {
     private final DocumentStorage storage;
     private final DocumentRevisionCompletionWorker completionWorker;
 
+    @Value("${document.revision.inactivity-timeout:PT2H}")
+    private Duration inactivityTimeout;
+
     @Transactional
     public DocumentRevisionCreateResponse createRevision(UUID documentId, User user) {
         Document document = document(documentId);
@@ -112,7 +119,8 @@ public class DocumentRevisionService {
     }
 
     public DocumentSlidesResponse getSlides(UUID documentId, User user) {
-        Document document = document(documentId); requireManager(document, user);
+        Document document = document(documentId);
+        requireApprovedMember(document, user);
         List<DocumentSlideResponse> slides = slideRepository.findAllByDocumentIdOrderByPageNumberAsc(documentId).stream()
                 .map(s -> new DocumentSlideResponse(s.getId(), s.getPageNumber(), s.getStatus(), storage.presignedGetUrl(s.getThumbnailKey()))).toList();
         return new DocumentSlidesResponse(documentId, storage.presignedGetUrl(document.getPdfKey()), document.getPageCount(), slides);
@@ -198,17 +206,19 @@ public class DocumentRevisionService {
             }
         }
         if (revision.getStatus() != RevisionStatus.EDITING) throw new BusinessException(DocumentErrorCode.REVISION_NOT_EDITABLE);
-        List<String> keys = new ArrayList<>();
-        if (revision.getSourcePdfKey() != null) keys.add(revision.getSourcePdfKey());
-        revisionSlideRepository.findAllByRevisionIdOrderBySourcePageNumberAsc(revisionId).forEach(s -> keys.add(s.getThumbnailKey()));
-        revisionPageRepository.deleteAllByRevisionId(revisionId);
-        revisionOperationRepository.deleteAllByRevisionId(revisionId);
-        revisionSlideRepository.deleteAllByRevisionId(revisionId);
-        revision.cancel();
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override public void afterCommit() { keys.forEach(key -> { try { storage.delete(key); } catch (RuntimeException ignored) {} }); }
-        });
+        cancelRevision(revision);
         return new DocumentRevisionCancelResponse(revisionId, revision.getStatus());
+    }
+
+    @Scheduled(fixedDelayString = "${document.revision.cleanup-fixed-delay:PT5M}")
+    @Transactional
+    public void cancelInactiveRevisions() {
+        Instant updatedBefore = Instant.now().minus(inactivityTimeout);
+        revisionRepository.findAllInactiveForUpdate(
+                        RevisionStatus.EDITING,
+                        updatedBefore
+                )
+                .forEach(this::cancelRevision);
     }
 
 
@@ -265,5 +275,38 @@ public class DocumentRevisionService {
     private DocumentRevision revision(UUID id) { return revisionRepository.findById(id).orElseThrow(() -> new BusinessException(DocumentErrorCode.REVISION_NOT_FOUND)); }
     private Document document(UUID id) { return documentRepository.findById(id).orElseThrow(() -> new BusinessException(DocumentErrorCode.DOCUMENT_NOT_FOUND)); }
     private void verifyDocument(DocumentRevision r, UUID id) { if (!r.getDocument().getId().equals(id)) throw new BusinessException(DocumentErrorCode.REVISION_NOT_FOUND); }
+    private void requireApprovedMember(Document document, User user) {
+        memberRepository.findBySpaceIdAndUserIdAndStatusAndRemovedAtIsNull(
+                        document.getSpace().getId(),
+                        user.getId(),
+                        SpaceMemberStatus.APPROVED
+                )
+                .orElseThrow(() -> new BusinessException(DocumentErrorCode.DOCUMENT_ACCESS_DENIED));
+    }
     private void requireManager(Document d, User u) { SpaceMember m = memberRepository.findBySpaceIdAndUserIdAndStatusAndRemovedAtIsNull(d.getSpace().getId(), u.getId(), SpaceMemberStatus.APPROVED).orElseThrow(() -> new BusinessException(DocumentErrorCode.DOCUMENT_ACCESS_DENIED)); if (m.getRole() != SpaceMemberRole.PROFESSOR && (m.getRole() != SpaceMemberRole.ASSISTANT || !permissionRepository.existsBySpaceMemberIdAndPermission(m.getId(), PermissionType.LECTURE_MATERIAL_MANAGE))) throw new BusinessException(DocumentErrorCode.DOCUMENT_ACCESS_DENIED); }
+
+    private void cancelRevision(DocumentRevision revision) {
+        List<String> keys = new ArrayList<>();
+        if (revision.getSourcePdfKey() != null) {
+            keys.add(revision.getSourcePdfKey());
+        }
+        revisionSlideRepository.findAllByRevisionIdOrderBySourcePageNumberAsc(revision.getId())
+                .forEach(slide -> keys.add(slide.getThumbnailKey()));
+        revisionPageRepository.deleteAllByRevisionId(revision.getId());
+        revisionOperationRepository.deleteAllByRevisionId(revision.getId());
+        revisionSlideRepository.deleteAllByRevisionId(revision.getId());
+        revision.cancel();
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                keys.forEach(key -> {
+                    try {
+                        storage.delete(key);
+                    } catch (RuntimeException ignored) {
+                        // DB 취소는 완료됐으므로 S3 정리 실패는 재시도 대상으로 남긴다.
+                    }
+                });
+            }
+        });
+    }
 }

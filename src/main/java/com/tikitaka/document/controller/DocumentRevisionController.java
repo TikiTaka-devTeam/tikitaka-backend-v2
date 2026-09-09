@@ -42,21 +42,21 @@ public class DocumentRevisionController {
     private final DocumentRevisionService documentRevisionService;
     private final CurrentUserResolver currentUserResolver;
 
-    @Operation(summary = "MAT-005 강의자료 수정 세션 생성", description = "실제 Slide를 기준으로 편집용 RevisionPage를 생성합니다.")
+    @Operation(summary = "MAT-006 강의자료 수정 세션 생성", description = "실제 Slide를 기준으로 편집용 RevisionPage를 생성합니다.")
     @PostMapping("/api/v1/documents/{documentId}/revisions")
     @ResponseStatus(HttpStatus.CREATED)
     public DocumentRevisionCreateResponse createRevision(@PathVariable UUID documentId, Authentication authentication) {
         return documentRevisionService.createRevision(documentId, currentUserResolver.resolve(authentication));
     }
 
-    @Operation(summary = "MAT-006 삽입용 PDF 업로드", description = "수정 세션에 삽입할 PDF와 페이지별 미리보기 썸네일을 생성합니다.")
+    @Operation(summary = "MAT-007 삽입용 PDF 업로드", description = "수정 세션에 삽입할 PDF와 페이지별 미리보기 썸네일을 생성합니다.")
     @PostMapping(value = "/api/v1/documents/{documentId}/revisions/{revisionId}/source-pdf", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public SourcePdfUploadResponse uploadSourcePdf(@PathVariable UUID documentId, @PathVariable UUID revisionId,
             @RequestPart("file") MultipartFile file, Authentication authentication) {
         return documentRevisionService.uploadSourcePdf(documentId, revisionId, file, currentUserResolver.resolve(authentication));
     }
 
-    @Operation(summary = "MAT-007 실제 강의자료 페이지 목록 조회", description = "수정 세션의 임시 상태를 반영하지 않은 실제 Slide 목록을 조회합니다.")
+    @Operation(summary = "MAT-005 실제 강의자료 페이지 목록 조회", description = "수정 세션의 임시 상태를 반영하지 않은 실제 Slide 목록을 조회합니다.")
     @GetMapping("/api/v1/documents/{documentId}/slides")
     public DocumentSlidesResponse getSlides(@PathVariable UUID documentId, Authentication authentication) {
         return documentRevisionService.getSlides(documentId, currentUserResolver.resolve(authentication));
