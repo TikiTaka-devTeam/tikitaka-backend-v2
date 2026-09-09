@@ -20,6 +20,7 @@ import org.springframework.web.multipart.MultipartFile;
 import com.tikitaka.document.dto.response.DocumentCreateResponse;
 import com.tikitaka.document.dto.response.DocumentDownloadResponse;
 import com.tikitaka.document.dto.response.DocumentListItemResponse;
+import com.tikitaka.document.dto.response.DocumentSlidesResponse;
 import com.tikitaka.document.service.DocumentService;
 import com.tikitaka.global.config.OpenApiConfig;
 import com.tikitaka.global.security.CurrentUserResolver;
@@ -83,6 +84,17 @@ public class DocumentController {
             Authentication authentication
     ) {
         return documentService.downloadDocument(
+                documentId,
+                currentUserResolver.resolve(authentication));
+    }
+
+    @Operation(summary = "MAT-005 실제 강의자료 페이지 목록 조회", description = "수정 세션의 임시 상태를 반영하지 않은 실제 Slide 목록을 조회합니다.")
+    @GetMapping("/api/v1/documents/{documentId}/slides")
+    public DocumentSlidesResponse getSlides(
+            @PathVariable UUID documentId,
+            Authentication authentication
+    ) {
+        return documentService.getSlides(
                 documentId,
                 currentUserResolver.resolve(authentication));
     }

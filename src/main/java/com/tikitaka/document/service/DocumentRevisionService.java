@@ -18,8 +18,6 @@ import org.springframework.web.multipart.MultipartFile;
 
 import com.tikitaka.document.dto.response.DocumentRevisionCreateResponse;
 import com.tikitaka.document.dto.response.DocumentRevisionDetailResponse;
-import com.tikitaka.document.dto.response.DocumentSlideResponse;
-import com.tikitaka.document.dto.response.DocumentSlidesResponse;
 import com.tikitaka.document.dto.response.RevisionPageResponse;
 import com.tikitaka.document.dto.response.RevisionSourceSlideResponse;
 import com.tikitaka.document.dto.response.SourcePdfUploadResponse;
@@ -116,14 +114,6 @@ public class DocumentRevisionService {
             return new SourcePdfUploadResponse(revisionId, revision.getSourceFileName(), storage.presignedGetUrl(pdfKey), pdf.pageCount(),
                     saved.stream().map(s -> new RevisionSourceSlideResponse(s.getId(), s.getSourcePageNumber(), storage.presignedGetUrl(s.getThumbnailKey()))).toList());
         } catch (RuntimeException e) { keys.forEach(k -> { try { storage.delete(k); } catch (RuntimeException ignored) {} }); throw e; }
-    }
-
-    public DocumentSlidesResponse getSlides(UUID documentId, User user) {
-        Document document = document(documentId);
-        requireApprovedMember(document, user);
-        List<DocumentSlideResponse> slides = slideRepository.findAllByDocumentIdOrderByPageNumberAsc(documentId).stream()
-                .map(s -> new DocumentSlideResponse(s.getId(), s.getPageNumber(), s.getStatus(), storage.presignedGetUrl(s.getThumbnailKey()))).toList();
-        return new DocumentSlidesResponse(documentId, storage.presignedGetUrl(document.getPdfKey()), document.getPageCount(), slides);
     }
 
     public DocumentRevisionDetailResponse getRevision(UUID documentId, UUID revisionId, User user) {
@@ -275,14 +265,6 @@ public class DocumentRevisionService {
     private DocumentRevision revision(UUID id) { return revisionRepository.findById(id).orElseThrow(() -> new BusinessException(DocumentErrorCode.REVISION_NOT_FOUND)); }
     private Document document(UUID id) { return documentRepository.findById(id).orElseThrow(() -> new BusinessException(DocumentErrorCode.DOCUMENT_NOT_FOUND)); }
     private void verifyDocument(DocumentRevision r, UUID id) { if (!r.getDocument().getId().equals(id)) throw new BusinessException(DocumentErrorCode.REVISION_NOT_FOUND); }
-    private void requireApprovedMember(Document document, User user) {
-        memberRepository.findBySpaceIdAndUserIdAndStatusAndRemovedAtIsNull(
-                        document.getSpace().getId(),
-                        user.getId(),
-                        SpaceMemberStatus.APPROVED
-                )
-                .orElseThrow(() -> new BusinessException(DocumentErrorCode.DOCUMENT_ACCESS_DENIED));
-    }
     private void requireManager(Document d, User u) { SpaceMember m = memberRepository.findBySpaceIdAndUserIdAndStatusAndRemovedAtIsNull(d.getSpace().getId(), u.getId(), SpaceMemberStatus.APPROVED).orElseThrow(() -> new BusinessException(DocumentErrorCode.DOCUMENT_ACCESS_DENIED)); if (m.getRole() != SpaceMemberRole.PROFESSOR && (m.getRole() != SpaceMemberRole.ASSISTANT || !permissionRepository.existsBySpaceMemberIdAndPermission(m.getId(), PermissionType.LECTURE_MATERIAL_MANAGE))) throw new BusinessException(DocumentErrorCode.DOCUMENT_ACCESS_DENIED); }
 
     private void cancelRevision(DocumentRevision revision) {

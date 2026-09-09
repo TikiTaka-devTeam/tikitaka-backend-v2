@@ -21,7 +21,6 @@ import com.tikitaka.document.dto.response.DocumentRevisionCancelResponse;
 import com.tikitaka.document.dto.response.DocumentRevisionCompleteResponse;
 import com.tikitaka.document.dto.response.DocumentRevisionCreateResponse;
 import com.tikitaka.document.dto.response.DocumentRevisionDetailResponse;
-import com.tikitaka.document.dto.response.DocumentSlidesResponse;
 import com.tikitaka.document.dto.response.RevisionOperationResponse;
 import com.tikitaka.document.dto.response.RevisionUndoRedoResponse;
 import com.tikitaka.document.dto.response.SourcePdfUploadResponse;
@@ -54,12 +53,6 @@ public class DocumentRevisionController {
     public SourcePdfUploadResponse uploadSourcePdf(@PathVariable UUID documentId, @PathVariable UUID revisionId,
             @RequestPart("file") MultipartFile file, Authentication authentication) {
         return documentRevisionService.uploadSourcePdf(documentId, revisionId, file, currentUserResolver.resolve(authentication));
-    }
-
-    @Operation(summary = "MAT-005 실제 강의자료 페이지 목록 조회", description = "수정 세션의 임시 상태를 반영하지 않은 실제 Slide 목록을 조회합니다.")
-    @GetMapping("/api/v1/documents/{documentId}/slides")
-    public DocumentSlidesResponse getSlides(@PathVariable UUID documentId, Authentication authentication) {
-        return documentRevisionService.getSlides(documentId, currentUserResolver.resolve(authentication));
     }
 
     @Operation(summary = "MAT-008 수정 세션 상태 조회", description = "현재 RevisionPage 구성과 Undo/Redo 가능 여부를 조회합니다.")
