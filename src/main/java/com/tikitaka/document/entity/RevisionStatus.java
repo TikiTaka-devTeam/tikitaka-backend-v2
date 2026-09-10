@@ -4,5 +4,6 @@ public enum RevisionStatus {
     EDITING,
     PROCESSING,
     COMPLETED,
+    FAILED,
     CANCELED
 }

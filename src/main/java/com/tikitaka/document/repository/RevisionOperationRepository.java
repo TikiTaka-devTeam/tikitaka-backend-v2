@@ -27,6 +27,28 @@ public interface RevisionOperationRepository
             RevisionOperationState state
     );
 
+    Optional<RevisionOperation> findFirstByRevisionIdOrderBySequenceDesc(UUID revisionId);
+
+    Optional<RevisionOperation> findByRevisionIdAndSequence(UUID revisionId, Integer sequence);
+
+    Optional<RevisionOperation> findFirstByRevisionIdAndStateAndSequenceLessThanOrderBySequenceDesc(
+            UUID revisionId,
+            RevisionOperationState state,
+            Integer sequence
+    );
+
+    Optional<RevisionOperation> findFirstByRevisionIdAndStateAndSequenceGreaterThanOrderBySequenceAsc(
+            UUID revisionId,
+            RevisionOperationState state,
+            Integer sequence
+    );
+
+    List<RevisionOperation> findAllByRevisionIdAndStateAndSequenceGreaterThanOrderBySequenceAsc(
+            UUID revisionId,
+            RevisionOperationState state,
+            Integer sequence
+    );
+
     boolean existsByRevisionIdAndClientOperationId(
             UUID revisionId,
             UUID clientOperationId

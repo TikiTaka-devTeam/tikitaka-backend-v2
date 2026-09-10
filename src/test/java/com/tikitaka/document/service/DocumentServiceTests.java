@@ -120,7 +120,7 @@ class DocumentServiceTests {
                 .isInstanceOf(BusinessException.class)
                 .extracting(exception -> ((BusinessException) exception).getErrorCode())
                 .isEqualTo(DocumentErrorCode.DOCUMENT_ACCESS_DENIED);
-        verify(pdfProcessor, never()).process(any());
+        verify(pdfProcessor, never()).process(any(MultipartFile.class));
     }
 
     @Test

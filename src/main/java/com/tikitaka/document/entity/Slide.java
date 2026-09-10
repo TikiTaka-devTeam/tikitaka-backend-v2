@@ -6,6 +6,8 @@ import com.tikitaka.global.common.entity.BaseTimeEntity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -37,6 +39,10 @@ public class Slide extends BaseTimeEntity {
     @Column(name = "thumbnail_key", nullable = false, columnDefinition = "TEXT")
     private String thumbnailKey;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private SlideStatus status = SlideStatus.ACTIVE;
+
     private Slide(
             Document document,
             Integer pageNumber,
@@ -45,6 +51,7 @@ public class Slide extends BaseTimeEntity {
         this.document = document;
         this.pageNumber = pageNumber;
         this.thumbnailKey = thumbnailKey;
+        this.status = SlideStatus.ACTIVE;
     }
 
     public static Slide create(
@@ -53,5 +60,14 @@ public class Slide extends BaseTimeEntity {
             String thumbnailKey
     ) {
         return new Slide(document, pageNumber, thumbnailKey);
+    }
+
+    public void changePageNumber(Integer pageNumber) {
+        this.pageNumber = pageNumber;
+    }
+
+    public void markPlaceholder(String thumbnailKey) {
+        this.thumbnailKey = thumbnailKey;
+        this.status = SlideStatus.PLACEHOLDER;
     }
 }

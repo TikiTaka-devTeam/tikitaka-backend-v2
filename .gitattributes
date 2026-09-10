@@ -1,4 +1,1 @@
-/gradlew text eol=lf
-*.bat text eol=crlf
-*.jar binary
-*.sh text eol=lf
+docker/localstack/*.sh text eol=lf

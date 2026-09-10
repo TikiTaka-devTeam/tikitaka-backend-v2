@@ -15,11 +15,13 @@ import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.core.exception.SdkClientException;
 import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.core.ResponseBytes;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.S3Configuration;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
@@ -64,6 +66,16 @@ public class DocumentStorage {
                             .build())
                     .url()
                     .toString();
+        } catch (S3Exception | SdkClientException exception) {
+            throw new BusinessException(CommonErrorCode.S3_UPLOAD_FAILED, exception);
+        }
+    }
+
+    public byte[] get(String key) {
+        try {
+            ResponseBytes<GetObjectResponse> object = client().getObjectAsBytes(GetObjectRequest.builder()
+                    .bucket(properties.getBucket()).key(key).build());
+            return object.asByteArray();
         } catch (S3Exception | SdkClientException exception) {
             throw new BusinessException(CommonErrorCode.S3_UPLOAD_FAILED, exception);
         }

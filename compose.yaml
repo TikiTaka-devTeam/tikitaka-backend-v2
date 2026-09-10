@@ -26,7 +26,7 @@ services:
     ports:
       - "${LOCALSTACK_PORT:-4566}:4566"
     volumes:
-      - ./docker/localstack/init-s3.sh:/etc/localstack/init/ready.d/init-s3.sh:ro
+      - ./docker/localstack:/etc/localstack/init/ready.d:ro
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
       interval: 5s
