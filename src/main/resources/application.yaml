@@ -130,3 +130,8 @@ oauth:
     client-id: ${KAKAO_OAUTH_CLIENT_ID:}
     client-secret: ${KAKAO_OAUTH_CLIENT_SECRET:}
     redirect-uri: ${KAKAO_OAUTH_REDIRECT_URI:http://localhost:8080/api/v1/auth/oauth/kakao/callback}
+
+document:
+  revision:
+    inactivity-timeout: ${DOCUMENT_REVISION_INACTIVITY_TIMEOUT:PT30M}
+    cleanup-fixed-delay: ${DOCUMENT_REVISION_CLEANUP_FIXED_DELAY:PT5M}

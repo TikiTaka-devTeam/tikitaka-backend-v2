@@ -51,6 +51,10 @@ public class RevisionOperation extends BaseTimeEntity {
     @Column(nullable = false, columnDefinition = "jsonb")
     private Map<String, Object> payload;
 
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "inverse_payload", nullable = false, columnDefinition = "jsonb")
+    private Map<String, Object> inversePayload;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private RevisionOperationState state = RevisionOperationState.APPLIED;
@@ -58,11 +62,53 @@ public class RevisionOperation extends BaseTimeEntity {
     @Column(name = "preview_version", nullable = false)
     private Integer previewVersion;
 
+    private RevisionOperation(
+            DocumentRevision revision,
+            UUID clientOperationId,
+            Integer sequence,
+            RevisionOperationType type,
+            Map<String, Object> payload,
+            Map<String, Object> inversePayload,
+            Integer previewVersion
+    ) {
+        this.revision = revision;
+        this.clientOperationId = clientOperationId;
+        this.sequence = sequence;
+        this.type = type;
+        this.payload = Map.copyOf(payload);
+        this.inversePayload = Map.copyOf(inversePayload);
+        this.state = RevisionOperationState.APPLIED;
+        this.previewVersion = previewVersion;
+    }
+
+    public static RevisionOperation create(
+            DocumentRevision revision,
+            UUID clientOperationId,
+            Integer sequence,
+            RevisionOperationType type,
+            Map<String, Object> payload,
+            Map<String, Object> inversePayload,
+            Integer previewVersion
+    ) {
+        return new RevisionOperation(
+                revision,
+                clientOperationId,
+                sequence,
+                type,
+                payload,
+                inversePayload,
+                previewVersion);
+    }
+
     public void undo() {
         this.state = RevisionOperationState.UNDONE;
     }
 
     public void redo() {
         this.state = RevisionOperationState.APPLIED;
+    }
+
+    public void discard() {
+        this.state = RevisionOperationState.DISCARDED;
     }
 }
