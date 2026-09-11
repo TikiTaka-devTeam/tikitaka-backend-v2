@@ -44,4 +44,22 @@ public class RevisionSlide {
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
+
+    private RevisionSlide(
+            DocumentRevision revision,
+            Integer sourcePageNumber,
+            String thumbnailKey
+    ) {
+        this.revision = revision;
+        this.sourcePageNumber = sourcePageNumber;
+        this.thumbnailKey = thumbnailKey;
+    }
+
+    public static RevisionSlide create(
+            DocumentRevision revision,
+            Integer sourcePageNumber,
+            String thumbnailKey
+    ) {
+        return new RevisionSlide(revision, sourcePageNumber, thumbnailKey);
+    }
 }

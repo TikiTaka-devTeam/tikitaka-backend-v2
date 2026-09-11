@@ -27,9 +27,15 @@ public class PdfProcessor {
 
     public ProcessedPdf process(MultipartFile file) {
         try {
-            byte[] bytes = file.getBytes();
-            validateSignature(bytes);
+            return process(file.getBytes());
+        } catch (IOException exception) {
+            throw new BusinessException(DocumentErrorCode.PDF_PROCESSING_FAILED, exception);
+        }
+    }
 
+    public ProcessedPdf process(byte[] bytes) {
+        try {
+            validateSignature(bytes);
             try (PDDocument document = Loader.loadPDF(bytes)) {
                 if (document.isEncrypted()) {
                     throw new BusinessException(DocumentErrorCode.ENCRYPTED_PDF_NOT_SUPPORTED);

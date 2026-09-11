@@ -14,6 +14,8 @@ import org.springframework.web.multipart.MultipartFile;
 import com.tikitaka.document.dto.response.DocumentCreateResponse;
 import com.tikitaka.document.dto.response.DocumentDownloadResponse;
 import com.tikitaka.document.dto.response.DocumentListItemResponse;
+import com.tikitaka.document.dto.response.DocumentSlideResponse;
+import com.tikitaka.document.dto.response.DocumentSlidesResponse;
 import com.tikitaka.document.entity.Document;
 import com.tikitaka.document.entity.Slide;
 import com.tikitaka.document.exception.DocumentErrorCode;
@@ -142,6 +144,25 @@ public class DocumentService {
                                 RecentDocumentView.create(currentUser, document)));
 
         return new DocumentDownloadResponse(storage.presignedGetUrl(document.getPdfKey()));
+    }
+
+    public DocumentSlidesResponse getSlides(UUID documentId, User currentUser) {
+        Document document = getDocument(documentId);
+        requireApprovedMember(document.getSpace().getId(), currentUser);
+
+        List<DocumentSlideResponse> slides = slideRepository.findAllByDocumentIdOrderByPageNumberAsc(documentId)
+                .stream()
+                .map(slide -> new DocumentSlideResponse(
+                        slide.getId(),
+                        slide.getPageNumber(),
+                        slide.getStatus()))
+                .toList();
+
+        return new DocumentSlidesResponse(
+                documentId,
+                storage.presignedGetUrl(document.getPdfKey()),
+                document.getPageCount(),
+                slides);
     }
 
     @Transactional

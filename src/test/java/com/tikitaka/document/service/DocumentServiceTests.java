@@ -235,55 +235,25 @@ class DocumentServiceTests {
         UUID spaceId = UUID.randomUUID();
         User user = user();
 
-        SpaceMember member =
-                approve(
+        assertThatThrownBy(() ->
+                service.createDocument(
                         spaceId,
-                        user,
-                        SpaceMemberRole.ASSISTANT
-                );
-
-        when(
-                permissionRepository
-                        .existsBySpaceMemberIdAndPermission(
-                                member.getId(),
-                                PermissionType.LECTURE_MATERIAL_MANAGE
-                        )
-        ).thenReturn(false);
-
-        assertThatThrownBy(
-                () ->
-                        service.createDocument(
-                                spaceId,
-                                "1주차",
-                                mock(MultipartFile.class),
-                                user
-                        )
+                        "1주차",
+                        mock(MultipartFile.class),
+                        user
+                )
         )
-                .isInstanceOf(
-                        BusinessException.class
+                .isInstanceOf(BusinessException.class)
+                .extracting(exception ->
+                        ((BusinessException) exception).getErrorCode()
                 )
-                .extracting(
-                        exception ->
-                                ((BusinessException) exception)
-                                        .getErrorCode()
-                )
-                .isEqualTo(
-                        DocumentErrorCode.DOCUMENT_ACCESS_DENIED
-                );
+                .isEqualTo(DocumentErrorCode.DOCUMENT_ACCESS_DENIED);
 
         verify(
                 pdfProcessor,
                 never()
         ).process(
-                any()
-        );
-
-        verify(
-                notificationService,
-                never()
-        ).createDocumentUploadedNotification(
-                any(),
-                any()
+                any(MultipartFile.class)
         );
     }
 

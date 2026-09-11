@@ -136,3 +136,7 @@ webpush:
     public-key: ${WEBPUSH_VAPID_PUBLIC_KEY:}
     private-key: ${WEBPUSH_VAPID_PRIVATE_KEY:}
     subject: ${WEBPUSH_VAPID_SUBJECT:}
+document:
+  revision:
+    inactivity-timeout: ${DOCUMENT_REVISION_INACTIVITY_TIMEOUT:PT30M}
+    cleanup-fixed-delay: ${DOCUMENT_REVISION_CLEANUP_FIXED_DELAY:PT5M}
