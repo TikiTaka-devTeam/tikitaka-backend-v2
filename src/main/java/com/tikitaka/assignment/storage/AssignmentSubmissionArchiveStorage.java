@@ -117,6 +117,8 @@ public class AssignmentSubmissionArchiveStorage {
             );
         }
 
+        boolean completed = false;
+
         try (
                 BufferedOutputStream fileOutputStream =
                         new BufferedOutputStream(
@@ -201,6 +203,8 @@ public class AssignmentSubmissionArchiveStorage {
 
             zipStream.finish();
 
+            completed = true;
+
             return archivePath;
 
         } catch (
@@ -209,14 +213,19 @@ public class AssignmentSubmissionArchiveStorage {
                 | SdkClientException exception
         ) {
 
-            deleteTempFileQuietly(
-                    archivePath
-            );
-
             throw new BusinessException(
                     CommonErrorCode.INTERNAL_SERVER_ERROR,
                     exception
             );
+
+        } finally {
+
+            if (!completed) {
+
+                deleteTempFileQuietly(
+                        archivePath
+                );
+            }
         }
     }
 
