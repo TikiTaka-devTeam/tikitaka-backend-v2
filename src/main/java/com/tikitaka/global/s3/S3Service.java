@@ -3,6 +3,7 @@ package com.tikitaka.global.s3;
 import java.io.IOException;
 import java.net.URI;
 import java.time.LocalDate;
+import java.time.Duration;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
@@ -16,6 +17,14 @@ import org.springframework.web.multipart.MultipartFile;
 import com.tikitaka.global.exception.BusinessException;
 import com.tikitaka.global.exception.CommonErrorCode;
 
+import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
+import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
+import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.s3.S3Configuration;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.presigner.S3Presigner;
+import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 import software.amazon.awssdk.core.exception.SdkClientException;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
@@ -52,6 +61,11 @@ public class S3Service {
                 file,
                 directory
         );
+    }
+
+    public S3UploadResult uploadProfileImage(MultipartFile file, String userName) {
+        validator.validate(file, FileUploadType.PROFILE_IMAGE);
+        return uploadValidated(file, "profiles", userName);
     }
 
     public List<S3UploadResult> uploadAll(
@@ -142,15 +156,21 @@ public class S3Service {
         }
     }
 
+    private S3UploadResult uploadValidated(MultipartFile file, String directory) {
+        return uploadValidated(file, directory, null);
+    }
+
     private S3UploadResult uploadValidated(
             MultipartFile file,
-            String directory
+            String directory,
+            String userName
     ) {
 
         String key =
                 createKey(
                         directory,
-                        file.getOriginalFilename()
+                        file.getOriginalFilename(),
+                        userName
                 );
 
         PutObjectRequest request =
@@ -239,6 +259,31 @@ public class S3Service {
         }
     }
 
+    public String presignedProfileUrl(String url) {
+        Optional<String> key = managedKey(url).filter(value -> value.startsWith("profiles/"));
+        if (key.isEmpty()) {
+            return url;
+        }
+        S3Presigner.Builder builder = S3Presigner.builder().region(Region.of(properties.getRegion()));
+        if (properties.getEndpoint() != null && !properties.getEndpoint().isBlank()) {
+            builder.endpointOverride(URI.create(properties.getEndpoint()))
+                    .credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create(
+                            properties.getAccessKey(), properties.getSecretKey())))
+                    .serviceConfiguration(S3Configuration.builder().pathStyleAccessEnabled(true).build());
+        } else {
+            builder.credentialsProvider(DefaultCredentialsProvider.create());
+        }
+        try (S3Presigner presigner = builder.build()) {
+            return presigner.presignGetObject(GetObjectPresignRequest.builder()
+                    .signatureDuration(Duration.ofMinutes(10))
+                    .getObjectRequest(GetObjectRequest.builder()
+                            .bucket(properties.getBucket()).key(key.orElseThrow()).build())
+                    .build()).url().toString();
+        } catch (SdkClientException exception) {
+            throw new BusinessException(CommonErrorCode.S3_DOWNLOAD_FAILED, exception);
+        }
+    }
+
     public void deleteByUrlIfManaged(
             String url
     ) {
@@ -294,9 +339,9 @@ public class S3Service {
              *
              * bucket.s3.amazonaws.com/key
              */
-            if (host.startsWith(
-                    bucket + "."
-            )) {
+            if (host.equals(bucket + ".s3.amazonaws.com")
+                    || host.equals(bucket + ".s3." + properties.getRegion() + ".amazonaws.com")
+                    || host.equals(bucket + ".s3-" + properties.getRegion() + ".amazonaws.com")) {
 
                 key =
                         normalizedPath;
@@ -306,9 +351,8 @@ public class S3Service {
              *
              * s3.amazonaws.com/bucket/key
              */
-            } else if (normalizedPath.startsWith(
-                    bucket + "/"
-            )) {
+            } else if (normalizedPath.startsWith(bucket + "/")
+                    && isPathStyleHost(uri)) {
 
                 key =
                         normalizedPath.substring(
@@ -332,9 +376,25 @@ public class S3Service {
         }
     }
 
+    private boolean isPathStyleHost(URI uri) {
+        String host = uri.getHost();
+        if (host.equals("s3.amazonaws.com")
+                || host.equals("s3." + properties.getRegion() + ".amazonaws.com")
+                || host.equals("s3-" + properties.getRegion() + ".amazonaws.com")) {
+            return true;
+        }
+        if (properties.getEndpoint() == null || properties.getEndpoint().isBlank()) {
+            return false;
+        }
+        URI endpoint = URI.create(properties.getEndpoint());
+        return host.equals(endpoint.getHost()) && uri.getPort() == endpoint.getPort()
+                && uri.getScheme().equals(endpoint.getScheme());
+    }
+
     private String createKey(
             String directory,
-            String originalFilename
+            String originalFilename,
+            String userName
     ) {
 
         String safeDirectory =
@@ -360,14 +420,15 @@ public class S3Service {
                         ZoneOffset.UTC
                 );
 
-        return "%s/%d/%02d/%s%s".formatted(
+        String extension = extensionOf(originalFilename);
+        String filename = userName == null
+                ? UUID.randomUUID() + extension
+                : S3ObjectNames.imageFilename(userName, "프로필이미지", extension);
+        return "%s/%d/%02d/%s".formatted(
                 safeDirectory,
                 today.getYear(),
                 today.getMonthValue(),
-                UUID.randomUUID(),
-                extensionOf(
-                        originalFilename
-                )
+                filename
         );
     }
 

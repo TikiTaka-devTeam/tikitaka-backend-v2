@@ -47,6 +47,7 @@ import com.tikitaka.document.repository.RevisionPageRepository;
 import com.tikitaka.document.repository.RevisionSlideRepository;
 import com.tikitaka.document.repository.SlideRepository;
 import com.tikitaka.document.storage.DocumentStorage;
+import com.tikitaka.global.s3.S3ObjectNames;
 import com.tikitaka.global.exception.BusinessException;
 import com.tikitaka.global.s3.FileUploadType;
 import com.tikitaka.global.s3.S3FileValidator;
@@ -105,7 +106,7 @@ public class DocumentRevisionService {
             storage.put(pdfKey, pdf.originalBytes(), MediaType.APPLICATION_PDF_VALUE); keys.add(pdfKey);
             List<RevisionSlide> slides = new ArrayList<>();
             for (int i = 0; i < pdf.pageCount(); i++) {
-                String key = root + "/slides/" + (i + 1) + ".png";
+                String key = root + "/slides/" + S3ObjectNames.imageFilename(revision.getDocument().getTitle(), "추가슬라이드_" + (i + 1), ".png");
                 storage.put(key, pdf.pageThumbnails().get(i), MediaType.IMAGE_PNG_VALUE); keys.add(key);
                 slides.add(RevisionSlide.create(revision, i + 1, key));
             }

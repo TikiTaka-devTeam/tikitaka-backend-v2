@@ -7,7 +7,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import com.tikitaka.global.exception.BusinessException;
-import com.tikitaka.global.s3.FileUploadType;
 import com.tikitaka.global.s3.S3Service;
 import com.tikitaka.global.s3.S3UploadResult;
 import com.tikitaka.user.dto.ProfileImageResponse;
@@ -33,7 +32,7 @@ public class UserService {
     public UserProfileResponse getMyProfile(UUID userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(UserErrorCode.USER_NOT_FOUND));
-        return UserProfileResponse.from(user);
+        return UserProfileResponse.from(user, profileImageUrl(user.getProfileUrl()));
     }
 
     @Transactional
@@ -57,7 +56,7 @@ public class UserService {
             throw new BusinessException(UserErrorCode.PROFILE_IMAGE_UNAVAILABLE);
         }
 
-        S3UploadResult uploaded = s3Service.upload(profileImage, "profiles", FileUploadType.PROFILE_IMAGE);
+        S3UploadResult uploaded = s3Service.uploadProfileImage(profileImage, user.getName());
         try {
             s3Service.deleteByUrlIfManaged(previousUrl);
         } catch (BusinessException exception) {
@@ -69,7 +68,7 @@ public class UserService {
             throw exception;
         }
         user.changeProfileImage(uploaded.url());
-        return new ProfileImageResponse(uploaded.url());
+        return new ProfileImageResponse(profileImageUrl(uploaded.url()));
     }
 
     @Transactional
@@ -84,5 +83,13 @@ public class UserService {
             throw new BusinessException(UserErrorCode.SAME_PASSWORD);
         }
         user.changePassword(passwordEncoder.encode(request.newPassword()));
+    }
+
+    private String profileImageUrl(String url) {
+        if (url == null || url.isBlank()) {
+            return url;
+        }
+        S3Service s3Service = s3ServiceProvider.getIfAvailable();
+        return s3Service == null ? url : s3Service.presignedProfileUrl(url);
     }
 }

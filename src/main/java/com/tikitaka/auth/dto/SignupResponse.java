@@ -28,6 +28,10 @@ public record SignupResponse(
         String profileUrl
 ) {
     public static SignupResponse from(User user) {
+        return from(user, user.getProfileUrl());
+    }
+
+    public static SignupResponse from(User user, String profileUrl) {
         return new SignupResponse(
                 user.getId(),
                 user.getEmail(),
@@ -37,6 +41,6 @@ public record SignupResponse(
                 user.getUniv(),
                 user.getMajor(),
                 user.getMemberIdNumber(),
-                user.getProfileUrl());
+                profileUrl);
     }
 }

@@ -24,6 +24,7 @@ import com.tikitaka.document.pdf.ProcessedPdf;
 import com.tikitaka.document.repository.DocumentRepository;
 import com.tikitaka.document.repository.SlideRepository;
 import com.tikitaka.document.storage.DocumentStorage;
+import com.tikitaka.global.s3.S3ObjectNames;
 import com.tikitaka.notification.service.NotificationService;
 import com.tikitaka.global.exception.BusinessException;
 import com.tikitaka.global.s3.FileUploadType;
@@ -83,7 +84,7 @@ public class DocumentService {
         String assetId = UUID.randomUUID().toString();
         String root = "documents/assets/" + assetId;
         String pdfKey = root + "/original.pdf";
-        String documentThumbnailKey = root + "/thumbnail.png";
+        String documentThumbnailKey = root + "/" + S3ObjectNames.imageFilename(normalizedTitle, "썸네일", ".png");
         List<String> uploadedKeys = new ArrayList<>();
 
         try {
@@ -95,7 +96,7 @@ public class DocumentService {
 
             List<String> slideKeys = new ArrayList<>(processed.pageCount());
             for (int index = 0; index < processed.pageCount(); index++) {
-                String slideKey = root + "/slides/" + (index + 1) + ".png";
+                String slideKey = root + "/slides/" + S3ObjectNames.imageFilename(normalizedTitle, "슬라이드_" + (index + 1), ".png");
                 storage.put(slideKey, processed.pageThumbnails().get(index), MediaType.IMAGE_PNG_VALUE);
                 uploadedKeys.add(slideKey);
                 slideKeys.add(slideKey);

@@ -15,7 +15,6 @@ import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import com.tikitaka.global.exception.BusinessException;
-import com.tikitaka.global.s3.FileUploadType;
 import com.tikitaka.global.s3.S3Service;
 import com.tikitaka.global.s3.S3UploadResult;
 import com.tikitaka.user.dto.ProfileImageResponse;
@@ -42,12 +41,14 @@ class UserServiceTests {
                 "profile_image", "new.png", "image/png", new byte[] {1});
         when(userRepository.findById(userId)).thenReturn(Optional.of(user));
         when(s3ServiceProvider.getIfAvailable()).thenReturn(s3Service);
-        when(s3Service.upload(image, "profiles", FileUploadType.PROFILE_IMAGE))
+        when(s3Service.uploadProfileImage(image, user.getName()))
                 .thenReturn(new S3UploadResult("profiles/new.png", "https://example.com/profiles/new.png"));
 
+        when(s3Service.presignedProfileUrl("https://example.com/profiles/new.png"))
+                .thenReturn("https://signed.example/profiles/new.png");
         ProfileImageResponse response = userService.updateProfileImage(userId, image, false);
 
-        assertThat(response.profileUrl()).isEqualTo("https://example.com/profiles/new.png");
+        assertThat(response.profileUrl()).isEqualTo("https://signed.example/profiles/new.png");
         assertThat(user.getProfileUrl()).isEqualTo("https://example.com/profiles/new.png");
         verify(s3Service).deleteByUrlIfManaged(
                 "https://test-bucket.s3.ap-northeast-2.amazonaws.com/profiles/old.png");
@@ -109,6 +110,20 @@ class UserServiceTests {
         assertThat(response.major()).isEqualTo("컴퓨터공학과");
         assertThat(response.memberIdNumber()).isEqualTo("20231370");
         assertThat(response.profileUrl()).isEqualTo("https://example.com/profile.jpg");
+    }
+
+    @Test
+    void resolvesExistingProfileImageForDisplayWithoutChangingStoredUrl() {
+        UUID userId = UUID.randomUUID();
+        User user = localUser("encoded-password");
+        String stored = "https://test-bucket.s3.ap-northeast-2.amazonaws.com/profiles/old.png";
+        user.changeProfileImage(stored);
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(s3ServiceProvider.getIfAvailable()).thenReturn(s3Service);
+        when(s3Service.presignedProfileUrl(stored)).thenReturn("https://signed.example/old.png");
+
+        assertThat(userService.getMyProfile(userId).profileUrl()).isEqualTo("https://signed.example/old.png");
+        assertThat(user.getProfileUrl()).isEqualTo(stored);
     }
 
     @Test
