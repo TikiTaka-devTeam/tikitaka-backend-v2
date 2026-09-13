@@ -18,6 +18,7 @@ public enum CommonErrorCode implements ErrorCode {
     FILE_COUNT_EXCEEDED(HttpStatus.BAD_REQUEST, "FILE_COUNT_EXCEEDED", "첨부할 수 있는 파일 개수를 초과했습니다."),
     REQUEST_SIZE_EXCEEDED(HttpStatus.CONTENT_TOO_LARGE, "FILE_REQUEST_SIZE_EXCEEDED", "첨부파일 전체 크기를 초과했습니다."),
     S3_UPLOAD_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "S3_UPLOAD_FAILED", "파일 업로드에 실패했습니다."),
+    S3_DOWNLOAD_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "S3_DOWNLOAD_FAILED", "파일 조회 URL 발급에 실패했습니다."),
     S3_DELETE_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "S3_DELETE_FAILED", "파일 삭제에 실패했습니다.");
 
     private final HttpStatus status;

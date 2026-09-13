@@ -1,6 +1,8 @@
 package com.tikitaka.space.service;
 
 import com.tikitaka.global.exception.BusinessException;
+import com.tikitaka.global.s3.S3Service;
+import org.springframework.beans.factory.ObjectProvider;
 import com.tikitaka.space.dto.request.JoinRequestActionRequest;
 import com.tikitaka.space.dto.request.JoinSettingsRequest;
 import com.tikitaka.space.dto.request.RolePermissionsRequest;
@@ -40,6 +42,7 @@ import java.util.UUID;
 @Transactional(readOnly = true)
 public class SpaceMemberService {
 
+    private final ObjectProvider<S3Service> s3ServiceProvider;
     private final SpaceRepository spaceRepository;
     private final SpaceMemberRepository spaceMemberRepository;
     private final SpaceMemberPermissionRepository permissionRepository;
@@ -80,7 +83,7 @@ public class SpaceMemberService {
                                         member.getRole(),
                                         member.getUser().getName(),
                                         member.getUser().getMemberIdNumber(),
-                                        member.getUser().getProfileUrl()
+                                        profileImageUrl(member.getUser().getProfileUrl())
                                 )
                         )
                         .toList();
@@ -161,7 +164,7 @@ public class SpaceMemberService {
                                         member.getUser().getId(),
                                         member.getUser().getName(),
                                         member.getUser().getMemberIdNumber(),
-                                        member.getUser().getProfileUrl(),
+                                        profileImageUrl(member.getUser().getProfileUrl()),
                                         member.getRequestedAt()
                                 )
                         )
@@ -666,5 +669,13 @@ public class SpaceMemberService {
             case ASSISTANT -> 1;
             case STUDENT -> 2;
         };
+    }
+
+    private String profileImageUrl(String url) {
+        if (url == null || url.isBlank()) {
+            return url;
+        }
+        S3Service s3Service = s3ServiceProvider.getIfAvailable();
+        return s3Service == null ? url : s3Service.presignedProfileUrl(url);
     }
 }

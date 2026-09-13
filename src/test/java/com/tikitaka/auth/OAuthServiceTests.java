@@ -26,7 +26,6 @@ import com.tikitaka.auth.repository.AuthRepository;
 import com.tikitaka.auth.repository.TokenRepository;
 import com.tikitaka.auth.service.OAuthService;
 import com.tikitaka.auth.service.PhoneVerificationConsumer;
-import com.tikitaka.global.s3.FileUploadType;
 import com.tikitaka.global.s3.S3Service;
 import com.tikitaka.global.s3.S3UploadResult;
 import com.tikitaka.global.security.JwtProvider;
@@ -145,16 +144,17 @@ class OAuthServiceTests {
         when(signupTokens.validate("signup-token")).thenReturn(new OAuthSignupClaims(
                 AuthProvider.KAKAO, "provider-id", null, "카카오 닉네임", "https://oauth-profile"));
         when(s3ServiceProvider.getIfAvailable()).thenReturn(s3Service);
-        when(s3Service.upload(image, "profiles", FileUploadType.PROFILE_IMAGE))
+        when(s3Service.uploadProfileImage(image, request.name().trim()))
                 .thenReturn(new S3UploadResult("profiles/new.png", "https://s3/profile.png"));
         when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(jwtProvider.issue(null)).thenReturn(tokens());
         when(refreshHasher.hash("refresh")).thenReturn("refresh-hash");
 
+        when(s3Service.presignedProfileUrl("https://s3/profile.png")).thenReturn("https://signed.example/profile.png");
         OAuthSignupResponse response = service.signup(request, image);
 
-        assertThat(response.user().profileUrl()).isEqualTo("https://s3/profile.png");
-        verify(s3Service).upload(image, "profiles", FileUploadType.PROFILE_IMAGE);
+        assertThat(response.user().profileUrl()).isEqualTo("https://signed.example/profile.png");
+        verify(s3Service).uploadProfileImage(image, request.name().trim());
     }
 
     private Auth mockAuth(User user) {

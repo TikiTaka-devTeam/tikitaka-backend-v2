@@ -21,7 +21,6 @@ import com.tikitaka.auth.oauth.OAuthSignupTokenService;
 import com.tikitaka.auth.repository.AuthRepository;
 import com.tikitaka.auth.repository.TokenRepository;
 import com.tikitaka.global.exception.BusinessException;
-import com.tikitaka.global.s3.FileUploadType;
 import com.tikitaka.global.s3.S3Service;
 import com.tikitaka.global.security.JwtProvider;
 import com.tikitaka.global.security.RefreshTokenHasher;
@@ -87,21 +86,21 @@ public class OAuthService {
             throw new BusinessException(AuthErrorCode.PHONE_NUMBER_ALREADY_REGISTERED);
         }
         phoneVerificationConsumer.consume(request.phoneVerificationToken(), phone);
-        String profileUrl = resolveProfileUrl(profileImage, claims.profileUrl());
+        String profileUrl = resolveProfileUrl(profileImage, claims.profileUrl(), name);
         User user = userRepository.save(User.createLocal(email, null, name, request.accountType(),
                 phone, request.univ().trim(), request.major().trim(), request.memberIdNumber().trim(),
                 profileUrl));
         authRepository.save(Auth.create(user, claims.provider(), claims.providerUserId()));
-        return OAuthSignupResponse.of(issueTokens(user), user);
+        return OAuthSignupResponse.of(issueTokens(user), user, profileImageUrl(user.getProfileUrl()));
     }
 
-    private String resolveProfileUrl(MultipartFile profileImage, String oauthProfileUrl) {
+    private String resolveProfileUrl(MultipartFile profileImage, String oauthProfileUrl, String userName) {
         if (profileImage == null) return oauthProfileUrl;
         S3Service s3Service = s3ServiceProvider.getIfAvailable();
         if (s3Service == null) {
             throw new BusinessException(AuthErrorCode.PROFILE_UPLOAD_UNAVAILABLE);
         }
-        return s3Service.upload(profileImage, "profiles", FileUploadType.PROFILE_IMAGE).url();
+        return s3Service.uploadProfileImage(profileImage, userName).url();
     }
 
     private TokenPair issueTokens(User user) {
@@ -143,5 +142,13 @@ public class OAuthService {
 
     private String normalizeNullableEmail(String email) {
         return email == null ? null : normalizeEmail(email);
+    }
+
+    private String profileImageUrl(String url) {
+        if (url == null || url.isBlank()) {
+            return url;
+        }
+        S3Service s3Service = s3ServiceProvider.getIfAvailable();
+        return s3Service == null ? url : s3Service.presignedProfileUrl(url);
     }
 }

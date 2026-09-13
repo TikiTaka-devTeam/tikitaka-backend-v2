@@ -30,7 +30,6 @@ import com.tikitaka.auth.entity.Token;
 import com.tikitaka.auth.exception.AuthErrorCode;
 import com.tikitaka.auth.repository.TokenRepository;
 import com.tikitaka.global.exception.BusinessException;
-import com.tikitaka.global.s3.FileUploadType;
 import com.tikitaka.global.s3.S3Service;
 import com.tikitaka.global.security.JwtProvider;
 import com.tikitaka.global.security.RefreshTokenHasher;
@@ -91,7 +90,7 @@ public class AuthService {
         ensurePhoneAvailable(phoneNumber);
         phoneVerificationConsumer.consume(request.phoneVerificationToken(), phoneNumber);
 
-        String profileUrl = uploadProfileImage(profileImage);
+        String profileUrl = uploadProfileImage(profileImage, request.name().trim());
         User user = User.createLocal(
                 email,
                 passwordEncoder.encode(request.password()),
@@ -102,7 +101,7 @@ public class AuthService {
                 request.major().trim(),
                 request.memberIdNumber().trim(),
                 profileUrl);
-        return SignupResponse.from(userRepository.save(user));
+        return SignupResponse.from(userRepository.save(user), profileImageUrl(user.getProfileUrl()));
     }
 
     @Transactional
@@ -170,7 +169,7 @@ public class AuthService {
         }
     }
 
-    private String uploadProfileImage(MultipartFile profileImage) {
+    private String uploadProfileImage(MultipartFile profileImage, String userName) {
         if (profileImage == null || profileImage.isEmpty()) {
             return null;
         }
@@ -178,7 +177,7 @@ public class AuthService {
         if (s3Service == null) {
             throw new BusinessException(AuthErrorCode.PROFILE_UPLOAD_UNAVAILABLE);
         }
-        return s3Service.upload(profileImage, "profiles", FileUploadType.PROFILE_IMAGE).url();
+        return s3Service.uploadProfileImage(profileImage, userName).url();
     }
 
     private void ensureEmailAvailable(String email) {
@@ -199,5 +198,13 @@ public class AuthService {
 
     private String normalizePhone(String phoneNumber) {
         return phoneNumber.replace("-", "").trim();
+    }
+
+    private String profileImageUrl(String url) {
+        if (url == null || url.isBlank()) {
+            return url;
+        }
+        S3Service s3Service = s3ServiceProvider.getIfAvailable();
+        return s3Service == null ? url : s3Service.presignedProfileUrl(url);
     }
 }

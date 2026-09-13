@@ -19,6 +19,10 @@ public record UserProfileResponse(
         @Schema(description = "프로필 이미지 URL", nullable = true) String profileUrl
 ) {
     public static UserProfileResponse from(User user) {
+        return from(user, user.getProfileUrl());
+    }
+
+    public static UserProfileResponse from(User user, String profileUrl) {
         return new UserProfileResponse(
                 user.getId(),
                 user.getEmail(),
@@ -28,6 +32,6 @@ public record UserProfileResponse(
                 user.getUniv(),
                 user.getMajor(),
                 user.getMemberIdNumber(),
-                user.getProfileUrl());
+                profileUrl);
     }
 }
