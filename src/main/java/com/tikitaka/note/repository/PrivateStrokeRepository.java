@@ -16,4 +16,7 @@ public interface PrivateStrokeRepository
     );
 
     void deleteAllByLayerId(UUID layerId);
+    java.util.Optional<PrivateStroke> findByIdAndLayerId(UUID id, UUID layerId);
+
+    List<PrivateStroke> findAllByLayerIdAndDeletedFalseOrderByStrokeOrderAscIdAsc(UUID layerId);
 }
