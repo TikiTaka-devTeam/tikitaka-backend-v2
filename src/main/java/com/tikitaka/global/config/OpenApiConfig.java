@@ -22,6 +22,7 @@ import io.swagger.v3.oas.models.Paths;
 import io.swagger.v3.oas.models.media.Encoding;
 import io.swagger.v3.oas.models.info.Info;
 import io.swagger.v3.oas.models.security.SecurityScheme;
+import io.swagger.v3.oas.models.servers.Server;
 
 @Configuration
 public class OpenApiConfig {
@@ -32,6 +33,8 @@ public class OpenApiConfig {
     @Bean
     OpenAPI tikitakaOpenApi() {
         return new OpenAPI()
+                // Resolve API requests against the public origin serving Swagger, even behind a proxy.
+                .servers(List.of(new Server().url("/")))
                 .info(new Info()
                         .title("TikiTaka API")
                         .description("TikiTaka backend REST API")
