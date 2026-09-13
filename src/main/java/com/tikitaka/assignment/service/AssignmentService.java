@@ -14,6 +14,8 @@ import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.tikitaka.assignment.dto.request.AssignmentCreateRequest;
@@ -54,6 +56,7 @@ import com.tikitaka.assignment.repository.AssignmentRepository;
 import com.tikitaka.assignment.repository.AssignmentSubmissionRepository;
 import com.tikitaka.assignment.repository.SubmissionFileRepository;
 import com.tikitaka.assignment.storage.AssignmentSubmissionArchiveStorage;
+import com.tikitaka.notification.service.NotificationService;
 import com.tikitaka.global.exception.BusinessException;
 import com.tikitaka.global.s3.FileUploadType;
 import com.tikitaka.global.s3.S3Service;
@@ -87,6 +90,7 @@ public class AssignmentService {
     private final SpaceMemberPermissionRepository spaceMemberPermissionRepository;
     private final S3Service s3Service;
     private final AssignmentSubmissionArchiveStorage archiveStorage;
+    private final NotificationService notificationService;
 
     // ASG-001
     public AssignmentListResponse getAssignments(
@@ -404,6 +408,11 @@ public class AssignmentService {
 
         if (!assignment.isClosed()) {
             assignment.close();
+
+            notificationService.createAssignmentClosedNotification(
+                    assignment.getSpace(),
+                    assignment.getId()
+            );
         }
 
         return new AssignmentCloseResponse(
@@ -1146,6 +1155,10 @@ public class AssignmentService {
                                 .ASSIGNMENT_ATTACHMENT
                 );
 
+        deleteUploadedFilesAfterRollback(
+                uploaded
+        );
+
         List<AssignmentFile> entities =
                 new ArrayList<>();
 
@@ -1212,6 +1225,10 @@ public class AssignmentService {
                                 .ASSIGNMENT_SUBMISSION
                 );
 
+        deleteUploadedFilesAfterRollback(
+                uploaded
+        );
+
         List<SubmissionFile> entities =
                 new ArrayList<>();
 
@@ -1251,13 +1268,10 @@ public class AssignmentService {
                                 submission.getId()
                         );
 
-        for (SubmissionFile file :
-                existingFiles) {
-
-            s3Service.deleteByUrlIfManaged(
-                    file.getFileUrl()
-            );
-        }
+        List<String> fileUrls =
+                existingFiles.stream()
+                        .map(SubmissionFile::getFileUrl)
+                        .toList();
 
         submissionFileRepository
                 .deleteAllBySubmissionId(
@@ -1265,6 +1279,10 @@ public class AssignmentService {
                 );
 
         submissionFileRepository.flush();
+
+        deleteS3FilesAfterCommit(
+                fileUrls
+        );
     }
 
     private void updateRetainedFiles(
@@ -1318,19 +1336,124 @@ public class AssignmentService {
                         )
                         .toList();
 
-        for (AssignmentFile file :
-                filesToDelete) {
-
-            s3Service.deleteByUrlIfManaged(
-                    file.getFileUrl()
-            );
-        }
+        List<String> fileUrls =
+                filesToDelete.stream()
+                        .map(AssignmentFile::getFileUrl)
+                        .toList();
 
         assignmentFileRepository.deleteAll(
                 filesToDelete
         );
 
         assignmentFileRepository.flush();
+
+        deleteS3FilesAfterCommit(
+                fileUrls
+        );
+    }
+
+    /**
+     * DB COMMIT 성공 후 기존 S3 파일을 삭제한다.
+     * DB rollback 시에는 afterCommit이 호출되지 않으므로
+     * 기존 S3 파일이 그대로 유지된다.
+     */
+    private void deleteS3FilesAfterCommit(
+            List<String> fileUrls
+    ) {
+        if (fileUrls == null
+                || fileUrls.isEmpty()) {
+
+            return;
+        }
+
+        List<String> urls =
+                List.copyOf(
+                        fileUrls
+                );
+
+        TransactionSynchronizationManager
+                .registerSynchronization(
+                        new TransactionSynchronization() {
+
+                            @Override
+                            public void afterCommit() {
+
+                                for (String fileUrl : urls) {
+
+                                    try {
+
+                                        s3Service
+                                                .deleteByUrlIfManaged(
+                                                        fileUrl
+                                                );
+
+                                    } catch (Exception ignored) {
+
+                                        /*
+                                         * DB commit은 이미 완료된 상태다.
+                                         * S3 삭제 실패로 DB를 rollback할 수 없으므로
+                                         * 추후 로그/재시도 대상으로 처리한다.
+                                         */
+                                    }
+                                }
+                            }
+                        }
+                );
+    }
+
+    /**
+     * 신규 S3 업로드 이후 DB 트랜잭션이 rollback되면
+     * 새로 업로드된 S3 객체를 제거한다.
+     */
+    private void deleteUploadedFilesAfterRollback(
+            List<S3UploadResult> uploadedFiles
+    ) {
+        if (uploadedFiles == null
+                || uploadedFiles.isEmpty()) {
+
+            return;
+        }
+
+        List<S3UploadResult> uploaded =
+                List.copyOf(
+                        uploadedFiles
+                );
+
+        TransactionSynchronizationManager
+                .registerSynchronization(
+                        new TransactionSynchronization() {
+
+                            @Override
+                            public void afterCompletion(
+                                    int status
+                            ) {
+                                if (status
+                                        != TransactionSynchronization
+                                        .STATUS_ROLLED_BACK) {
+
+                                    return;
+                                }
+
+                                for (S3UploadResult result :
+                                        uploaded) {
+
+                                    try {
+
+                                        s3Service.delete(
+                                                result.key()
+                                        );
+
+                                    } catch (Exception ignored) {
+
+                                        /*
+                                         * DB rollback은 이미 완료된 상태다.
+                                         * S3 정리 실패는 별도 재시도 대상이다.
+                                         */
+                                    }
+                                }
+                            }
+                        }
+                );
     }
 
     private Assignment getActiveAssignment(

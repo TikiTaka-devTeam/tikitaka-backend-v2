@@ -24,6 +24,7 @@ import com.tikitaka.space.dto.response.SpaceListResponse;
 import com.tikitaka.space.dto.response.SpaceQueryResponse;
 import com.tikitaka.space.dto.response.SpaceStatusResponse;
 import com.tikitaka.space.dto.response.SpaceUpdateResponse;
+import com.tikitaka.notification.service.NotificationService;
 import com.tikitaka.space.entity.Schedule;
 import com.tikitaka.space.entity.Space;
 import com.tikitaka.space.entity.SpaceColorKey;
@@ -58,6 +59,7 @@ public class SpaceService {
     private final SpaceRepository spaceRepository;
     private final SpaceMemberRepository spaceMemberRepository;
     private final ScheduleRepository scheduleRepository;
+    private final NotificationService notificationService;
 
     @Transactional
     public SpaceCreateResponse createSpace(
@@ -377,6 +379,13 @@ public class SpaceService {
         spaceMemberRepository.save(
                 member
         );
+
+        if (member.getStatus() == SpaceMemberStatus.PENDING) {
+            notificationService.createSpaceJoinRequestedNotification(
+                    space,
+                    member.getId()
+            );
+        }
 
         return new SpaceJoinResponse(
                 member.getId(),

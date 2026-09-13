@@ -33,6 +33,7 @@ import com.tikitaka.notice.exception.NoticeErrorCode;
 import com.tikitaka.notice.repository.NoticeFileRepository;
 import com.tikitaka.notice.repository.NoticeReadRepository;
 import com.tikitaka.notice.repository.SpaceNoticeRepository;
+import com.tikitaka.notification.service.NotificationService;
 import com.tikitaka.space.entity.PermissionType;
 import com.tikitaka.space.entity.SpaceMember;
 import com.tikitaka.space.entity.SpaceMemberRole;
@@ -60,6 +61,7 @@ public class NoticeService {
     private final SpaceMemberPermissionRepository permissionRepository;
     private final S3Service s3Service;
     private final CursorCodec cursorCodec;
+    private final NotificationService notificationService;
 
     // NOT-001
     public NoticeListResponse getNotices(
@@ -280,6 +282,11 @@ public class NoticeService {
         uploadFiles(
                 notice,
                 files
+        );
+
+        notificationService.createNoticeCreatedNotification(
+                member.getSpace(),
+                notice.getId()
         );
 
         return new NoticeCreateResponse(

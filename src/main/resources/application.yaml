@@ -131,6 +131,11 @@ oauth:
     client-secret: ${KAKAO_OAUTH_CLIENT_SECRET:}
     redirect-uri: ${KAKAO_OAUTH_REDIRECT_URI:http://localhost:8080/api/v1/auth/oauth/kakao/callback}
 
+webpush:
+  vapid:
+    public-key: ${WEBPUSH_VAPID_PUBLIC_KEY:}
+    private-key: ${WEBPUSH_VAPID_PRIVATE_KEY:}
+    subject: ${WEBPUSH_VAPID_SUBJECT:}
 document:
   revision:
     inactivity-timeout: ${DOCUMENT_REVISION_INACTIVITY_TIMEOUT:PT30M}

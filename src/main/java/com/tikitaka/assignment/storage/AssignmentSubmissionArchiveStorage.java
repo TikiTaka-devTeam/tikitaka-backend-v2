@@ -1,8 +1,10 @@
 package com.tikitaka.assignment.storage;
 
-import java.io.ByteArrayOutputStream;
+import java.io.BufferedOutputStream;
 import java.io.IOException;
 import java.net.URI;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.HashSet;
 import java.util.List;
@@ -22,7 +24,7 @@ import com.tikitaka.global.s3.S3Properties;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
-import software.amazon.awssdk.core.ResponseBytes;
+import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.core.exception.SdkClientException;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.regions.Region;
@@ -59,7 +61,7 @@ public class AssignmentSubmissionArchiveStorage {
             UUID assignmentId,
             List<SubmissionFile> submissionFiles
     ) {
-        byte[] archive =
+        Path archivePath =
                 createZip(
                         submissionFiles
                 );
@@ -71,26 +73,63 @@ public class AssignmentSubmissionArchiveStorage {
                         + UUID.randomUUID()
                         + ".zip";
 
-        uploadZip(
-                key,
-                archive
-        );
+        try {
 
-        return createPresignedUrl(
-                key
-        );
+            uploadZip(
+                    key,
+                    archivePath
+            );
+
+            return createPresignedUrl(
+                    key
+            );
+
+        } finally {
+
+            deleteTempFileQuietly(
+                    archivePath
+            );
+        }
     }
 
-    private byte[] createZip(
+    /**
+     * 제출 파일 전체를 JVM 메모리에 올리지 않고
+     * S3 InputStream -> ZipOutputStream -> 임시 파일로 스트리밍한다.
+     */
+    private Path createZip(
             List<SubmissionFile> submissionFiles
     ) {
+        Path archivePath;
+
+        try {
+
+            archivePath =
+                    Files.createTempFile(
+                            "assignment-submissions-",
+                            ".zip"
+                    );
+
+        } catch (IOException exception) {
+
+            throw new BusinessException(
+                    CommonErrorCode.INTERNAL_SERVER_ERROR,
+                    exception
+            );
+        }
+
+        boolean completed = false;
+
         try (
-                ByteArrayOutputStream byteStream =
-                        new ByteArrayOutputStream();
+                BufferedOutputStream fileOutputStream =
+                        new BufferedOutputStream(
+                                Files.newOutputStream(
+                                        archivePath
+                                )
+                        );
 
                 ZipOutputStream zipStream =
                         new ZipOutputStream(
-                                byteStream
+                                fileOutputStream
                         )
         ) {
 
@@ -103,11 +142,6 @@ public class AssignmentSubmissionArchiveStorage {
                 String key =
                         extractManagedKey(
                                 file.getFileUrl()
-                        );
-
-                byte[] content =
-                        downloadObject(
-                                key
                         );
 
                 String studentNumber =
@@ -151,44 +185,66 @@ public class AssignmentSubmissionArchiveStorage {
                         entry
                 );
 
-                zipStream.write(
-                        content
-                );
+                try (
+                        ResponseInputStream<GetObjectResponse>
+                                objectStream =
+                                openObjectStream(
+                                        key
+                                )
+                ) {
+
+                    objectStream.transferTo(
+                            zipStream
+                    );
+                }
 
                 zipStream.closeEntry();
             }
 
             zipStream.finish();
 
-            return byteStream.toByteArray();
+            completed = true;
 
-        } catch (IOException exception) {
+            return archivePath;
+
+        } catch (
+                IOException
+                | S3Exception
+                | SdkClientException exception
+        ) {
 
             throw new BusinessException(
                     CommonErrorCode.INTERNAL_SERVER_ERROR,
                     exception
             );
+
+        } finally {
+
+            if (!completed) {
+
+                deleteTempFileQuietly(
+                        archivePath
+                );
+            }
         }
     }
 
-    private byte[] downloadObject(
+    private ResponseInputStream<GetObjectResponse>
+    openObjectStream(
             String key
     ) {
         try {
 
-            ResponseBytes<GetObjectResponse> object =
-                    client().getObjectAsBytes(
-                            GetObjectRequest.builder()
-                                    .bucket(
-                                            properties.getBucket()
-                                    )
-                                    .key(
-                                            key
-                                    )
-                                    .build()
-                    );
-
-            return object.asByteArray();
+            return client().getObject(
+                    GetObjectRequest.builder()
+                            .bucket(
+                                    properties.getBucket()
+                            )
+                            .key(
+                                    key
+                            )
+                            .build()
+            );
 
         } catch (
                 S3Exception
@@ -204,9 +260,14 @@ public class AssignmentSubmissionArchiveStorage {
 
     private void uploadZip(
             String key,
-            byte[] archive
+            Path archivePath
     ) {
         try {
+
+            long archiveSize =
+                    Files.size(
+                            archivePath
+                    );
 
             client().putObject(
                     PutObjectRequest.builder()
@@ -220,13 +281,20 @@ public class AssignmentSubmissionArchiveStorage {
                                     "application/zip"
                             )
                             .contentLength(
-                                    (long) archive.length
+                                    archiveSize
                             )
                             .build(),
 
-                    RequestBody.fromBytes(
-                            archive
+                    RequestBody.fromFile(
+                            archivePath
                     )
+            );
+
+        } catch (IOException exception) {
+
+            throw new BusinessException(
+                    CommonErrorCode.INTERNAL_SERVER_ERROR,
+                    exception
             );
 
         } catch (
@@ -238,6 +306,28 @@ public class AssignmentSubmissionArchiveStorage {
                     CommonErrorCode.S3_UPLOAD_FAILED,
                     exception
             );
+        }
+    }
+
+    private void deleteTempFileQuietly(
+            Path archivePath
+    ) {
+        if (archivePath == null) {
+            return;
+        }
+
+        try {
+
+            Files.deleteIfExists(
+                    archivePath
+            );
+
+        } catch (IOException ignored) {
+
+            /*
+             * ZIP 업로드 결과에는 영향을 주지 않는다.
+             * 운영 환경에서는 로그/정리 작업 대상으로 남길 수 있다.
+             */
         }
     }
 

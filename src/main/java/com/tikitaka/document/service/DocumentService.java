@@ -24,6 +24,7 @@ import com.tikitaka.document.pdf.ProcessedPdf;
 import com.tikitaka.document.repository.DocumentRepository;
 import com.tikitaka.document.repository.SlideRepository;
 import com.tikitaka.document.storage.DocumentStorage;
+import com.tikitaka.notification.service.NotificationService;
 import com.tikitaka.global.exception.BusinessException;
 import com.tikitaka.global.s3.FileUploadType;
 import com.tikitaka.global.s3.S3FileValidator;
@@ -51,6 +52,7 @@ public class DocumentService {
     private final S3FileValidator fileValidator;
     private final PdfProcessor pdfProcessor;
     private final DocumentStorage storage;
+    private final NotificationService notificationService;
 
     public List<DocumentListItemResponse> getDocuments(UUID spaceId, User currentUser) {
         requireApprovedMember(spaceId, currentUser);
@@ -112,6 +114,11 @@ public class DocumentService {
             }
             slideRepository.saveAll(slides);
             deleteAfterRollback(uploadedKeys);
+
+            notificationService.createDocumentUploadedNotification(
+                    member.getSpace(),
+                    document.getId()
+            );
 
             return new DocumentCreateResponse(
                     document.getId(),
