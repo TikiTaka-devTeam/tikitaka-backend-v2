@@ -28,6 +28,7 @@ import com.tikitaka.document.repository.RevisionPageRepository;
 import com.tikitaka.document.repository.RevisionSlideRepository;
 import com.tikitaka.document.repository.SlideRepository;
 import com.tikitaka.document.storage.DocumentStorage;
+import com.tikitaka.global.s3.S3ObjectNames;
 
 import lombok.RequiredArgsConstructor;
 
@@ -81,7 +82,7 @@ public class DocumentRevisionCompletionWorker {
         ProcessedPdf processed = pdfProcessor.process(composedPdf);
         String root = "documents/" + document.getId() + "/revisions/" + revisionId + "/completed/" + UUID.randomUUID();
         String pdfKey = root + "/document.pdf";
-        String documentThumbnailKey = root + "/thumbnail.png";
+        String documentThumbnailKey = root + "/" + S3ObjectNames.imageFilename(document.getTitle(), "썸네일", ".png");
         put(uploadedKeys, pdfKey, processed.originalBytes(), MediaType.APPLICATION_PDF_VALUE);
         put(uploadedKeys, documentThumbnailKey, processed.pageThumbnails().get(0), MediaType.IMAGE_PNG_VALUE);
 
@@ -94,7 +95,7 @@ public class DocumentRevisionCompletionWorker {
             }
             if (page.getStatus() == RevisionPageStatus.DELETE_PENDING
                     || page.getSourceType() == RevisionSourceType.REVISION) {
-                String key = root + "/slides/" + (outputIndex + 1) + ".png";
+                String key = root + "/slides/" + S3ObjectNames.imageFilename(document.getTitle(), "슬라이드_" + (outputIndex + 1), ".png");
                 put(uploadedKeys, key, processed.pageThumbnails().get(outputIndex), MediaType.IMAGE_PNG_VALUE);
                 changedSlideThumbnailKeys.put(page.getId(), key);
             }
