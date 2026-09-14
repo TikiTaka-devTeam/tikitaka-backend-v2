@@ -23,6 +23,7 @@ import com.tikitaka.user.entity.User;
 import jakarta.validation.Validator;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
@@ -40,8 +41,7 @@ public class NoteService {
     private final Validator validator;
     private final FixerRepository fixers;
 
-    // A PostgreSQL row lock requires a writable transaction, even for snapshot reads.
-    @Transactional
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public StrokeLayerResponse getPrivate(UUID slideId, User user) {
         requireAccess(slideId, user, false, false);
         return privateLayers.findForRead(slideId, user.getId())
@@ -51,7 +51,7 @@ public class NoteService {
                 .orElseGet(() -> new StrokeLayerResponse(slideId, 0, List.of()));
     }
 
-    @Transactional
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public StrokeLayerResponse getShared(UUID slideId, User user) {
         requireAccess(slideId, user, true, false);
         return sharedLayers.findForRead(slideId)
@@ -93,7 +93,18 @@ public class NoteService {
                 throw new BusinessException(NoteErrorCode.NOTE_OPERATION_ID_CONFLICT);
             }
         }
-        int applied = request.operations().size() - existing.size();
+        Set<UUID> operationIdsToApply = new HashSet<>();
+        Set<UUID> deleteTargets = new HashSet<>();
+        for (Operation operation : request.operations()) {
+            if (existing.containsKey(operation.clientOperationId())) continue;
+            if (operation.type() == Type.DELETE
+                    && (isDeleted(operation.strokeId(), layerId, shared)
+                    || !deleteTargets.add(operation.strokeId()))) {
+                continue;
+            }
+            operationIdsToApply.add(operation.clientOperationId());
+        }
+        int applied = operationIdsToApply.size();
         if (applied > 0 && request.baseVersion() != version) {
             throw new BusinessException(NoteErrorCode.NOTE_VERSION_CONFLICT);
         }
@@ -108,6 +119,7 @@ public class NoteService {
             if (prior != null) {
                 strokeId = prior.getStrokeId();
             } else {
+                if (!operationIdsToApply.contains(operation.clientOperationId())) continue;
                 strokeId = apply(operation, layerId, shared);
                 if (shared) {
                     sharedOperations.saveAndFlush(new SharedStrokeOperation(layerId,
@@ -123,6 +135,17 @@ public class NoteService {
         }
         if (applied > 0) increaseVersion.run();
         return new StrokeSyncResponse(slideId, resultVersion, applied, List.copyOf(created));
+    }
+
+    private boolean isDeleted(UUID strokeId, UUID layerId, boolean shared) {
+        if (shared) {
+            return sharedStrokes.findByIdAndLayerId(strokeId, layerId)
+                    .map(SharedStroke::isDeleted)
+                    .orElseThrow(() -> new BusinessException(NoteErrorCode.NOTE_STROKE_NOT_FOUND));
+        }
+        return privateStrokes.findByIdAndLayerId(strokeId, layerId)
+                .map(PrivateStroke::isDeleted)
+                .orElseThrow(() -> new BusinessException(NoteErrorCode.NOTE_STROKE_NOT_FOUND));
     }
 
     private UUID apply(Operation operation, UUID layerId, boolean shared) {

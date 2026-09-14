@@ -141,6 +141,20 @@ class NoteServiceTests {
         assertThat(layer.getVersion()).isZero();
         verify(privateOps, never()).saveAndFlush(any());
     }
+    @Test void deleteOfAlreadyDeletedStrokeIsNoOp() {
+        UUID strokeId = UUID.randomUUID();
+        PrivateStroke stroke = PrivateStroke.create(layer, StrokeTool.PEN,
+                List.of(Map.of("x_ratio", 0.1, "y_ratio", 0.2)), null, "#000000", 2.0, 1.0, 0);
+        stroke.delete();
+        when(privateStrokes.findByIdAndLayerId(strokeId, layerId)).thenReturn(Optional.of(stroke));
+
+        var result = service.syncPrivate(slideId,
+                request(0, new Operation(UUID.randomUUID(), Type.DELETE, null, strokeId)), user);
+
+        assertThat(result.appliedCount()).isZero();
+        assertThat(result.version()).isZero();
+        verify(privateOps, never()).saveAndFlush(any());
+    }
     @Test void reusedClientStrokeIdConflicts() {
         when(privateOps.existsByLayerIdAndClientStrokeId(eq(layerId), any())).thenReturn(true);
         error(() -> service.syncPrivate(slideId, request(0, create()), user), NoteErrorCode.NOTE_CLIENT_STROKE_ID_CONFLICT);

@@ -21,7 +21,6 @@ public interface PrivateLayerRepository
     );
 
     void deleteAllBySlideId(UUID slideId);
-    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_READ)
     @org.springframework.data.jpa.repository.Query("select l from PrivateLayer l where l.slide.id = :slideId and l.user.id = :userId")
     Optional<PrivateLayer> findForRead(UUID slideId, UUID userId);
 

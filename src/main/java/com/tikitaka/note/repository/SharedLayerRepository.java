@@ -15,7 +15,6 @@ public interface SharedLayerRepository
     boolean existsBySlideId(UUID slideId);
 
     void deleteBySlideId(UUID slideId);
-    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_READ)
     @org.springframework.data.jpa.repository.Query("select l from SharedLayer l where l.slide.id = :slideId")
     Optional<SharedLayer> findForRead(UUID slideId);
 

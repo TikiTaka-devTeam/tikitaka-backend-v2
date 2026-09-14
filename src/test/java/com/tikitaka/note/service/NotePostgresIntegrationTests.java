@@ -31,6 +31,8 @@ import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.test.context.*;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.testcontainers.containers.PostgreSQLContainer;
@@ -55,6 +57,7 @@ class NotePostgresIntegrationTests {
     @Autowired NoteService notes;
 
     @Autowired JdbcTemplate jdbc;
+    @Autowired PlatformTransactionManager transactionManager;
     @Autowired UserRepository users;
     @Autowired SlideRepository slides;
     @Autowired WebApplicationContext context;
@@ -128,13 +131,43 @@ class NotePostgresIntegrationTests {
         assertThat(count("shared_stroke_operations")).isEqualTo(1);
         assertThat(jdbc.queryForObject("SELECT count(*) FROM private_layers WHERE slide_id=?",Integer.class,slideId)).isZero();
     }
-    @Test void privateDeletionDoesNotChangeSharedLayerAndRepeatedDeleteIsAccepted() {
+    @Test void readTransactionDoesNotBlockPrivateSync() throws Exception {
+        notes.syncPrivate(slideId, request(0, create()), student);
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        CountDownLatch readComplete = new CountDownLatch(1);
+        CountDownLatch releaseRead = new CountDownLatch(1);
+        try {
+            Future<?> read = pool.submit(() -> new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+                notes.getPrivate(slideId, student);
+                readComplete.countDown();
+                try {
+                    if (!releaseRead.await(5, TimeUnit.SECONDS)) throw new AssertionError("read was not released");
+                } catch (InterruptedException exception) {
+                    Thread.currentThread().interrupt();
+                    throw new AssertionError(exception);
+                }
+            }));
+            assertThat(readComplete.await(5, TimeUnit.SECONDS)).isTrue();
+
+            StrokeSyncResponse sync = pool.submit(() -> notes.syncPrivate(slideId, request(1, create()), student))
+                    .get(3, TimeUnit.SECONDS);
+
+            assertThat(sync.version()).isEqualTo(2);
+            releaseRead.countDown();
+            read.get(5, TimeUnit.SECONDS);
+        } finally {
+            releaseRead.countDown();
+            pool.shutdownNow();
+        }
+    }
+    @Test void privateDeletionDoesNotChangeSharedLayerAndRepeatedDeleteIsNoOp() {
         var shared=notes.syncShared(slideId,request(0,create()),professor);
         var personal=notes.syncPrivate(slideId,request(0,create()),student);
         UUID strokeId=personal.createdStrokes().get(0).strokeId();
         notes.syncPrivate(slideId,request(1,new Operation(UUID.randomUUID(),Type.DELETE,null,strokeId)),student);
         var repeated=notes.syncPrivate(slideId,request(2,new Operation(UUID.randomUUID(),Type.DELETE,null,strokeId)),student);
-        assertThat(repeated.version()).isEqualTo(3); assertThat(repeated.appliedCount()).isEqualTo(1);
+        assertThat(repeated.version()).isEqualTo(2); assertThat(repeated.appliedCount()).isZero();
+        assertThat(count("private_stroke_operations")).isEqualTo(2);
         assertThat(notes.getPrivate(slideId,student).strokes()).isEmpty();
         var teacherLayer=notes.getShared(slideId,student);
         assertThat(teacherLayer.version()).isEqualTo(shared.version()); assertThat(teacherLayer.strokes()).hasSize(1);
