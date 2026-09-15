@@ -1,4 +1,4 @@
-package com.tikitaka.fixer.entity;
+package com.tikitaka.note.entity;
 
 import java.time.Instant;
 import java.util.UUID;

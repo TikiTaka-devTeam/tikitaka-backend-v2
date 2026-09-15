@@ -16,4 +16,7 @@ public interface SharedStrokeRepository
     );
 
     void deleteAllByLayerId(UUID layerId);
+    java.util.Optional<SharedStroke> findByIdAndLayerId(UUID id, UUID layerId);
+
+    List<SharedStroke> findAllByLayerIdAndDeletedFalseOrderByStrokeOrderAscIdAsc(UUID layerId);
 }
