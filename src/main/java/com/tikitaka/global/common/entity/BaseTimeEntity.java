@@ -23,4 +23,8 @@ public abstract class BaseTimeEntity {
 
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
+
+    protected void touchUpdatedAt() {
+        this.updatedAt = Instant.now();
+    }
 }
