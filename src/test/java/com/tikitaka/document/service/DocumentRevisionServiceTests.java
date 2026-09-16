@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Test;
 
 import com.tikitaka.document.entity.Document;
 import com.tikitaka.document.entity.DocumentRevision;
+import com.tikitaka.document.entity.RevisionSlide;
 import com.tikitaka.document.entity.RevisionStatus;
 import com.tikitaka.document.exception.DocumentErrorCode;
 import com.tikitaka.document.pdf.PdfProcessor;
@@ -82,6 +83,7 @@ class DocumentRevisionServiceTests {
         User user = manager();
         Document document = document();
         DocumentRevision revision = mock(DocumentRevision.class);
+        RevisionSlide sourceSlide = mock(RevisionSlide.class);
         when(documentRepository.findById(documentId)).thenReturn(Optional.of(document));
         when(revisionRepository.findFirstByDocumentIdAndStatusIn(documentId, List.of(RevisionStatus.EDITING, RevisionStatus.PROCESSING)))
                 .thenReturn(Optional.of(revision));
@@ -92,13 +94,24 @@ class DocumentRevisionServiceTests {
         when(revision.getBaseDocumentVersion()).thenReturn(3);
         when(revision.getPreviewVersion()).thenReturn(2);
         when(revision.getOperationCursorSequence()).thenReturn(null);
+        when(revision.getSourceFileName()).thenReturn("additional.pdf");
+        when(revision.getSourcePdfKey()).thenReturn("revisions/source.pdf");
+        when(revision.getSourcePageCount()).thenReturn(1);
+        when(sourceSlide.getSourcePageNumber()).thenReturn(1);
+        when(sourceSlide.getThumbnailKey()).thenReturn("revisions/slide-1.png");
+        when(revisionSlideRepository.findAllByRevisionIdOrderBySourcePageNumberAsc(revisionId)).thenReturn(List.of(sourceSlide));
         when(revisionPageRepository.findAllByRevisionIdOrderByPositionAsc(revisionId)).thenReturn(List.of());
         when(revisionOperationRepository.findAllByRevisionIdOrderBySequenceAsc(revisionId)).thenReturn(List.of());
+        when(storage.presignedGetUrl("revisions/source.pdf")).thenReturn("https://signed.example/source.pdf");
+        when(storage.presignedGetUrl("revisions/slide-1.png")).thenReturn("https://signed.example/slide-1.png");
 
         var result = service.createRevision(documentId, user);
 
         assertThat(result.created()).isFalse();
         assertThat(result.detail().revisionId()).isEqualTo(revisionId);
+        assertThat(result.detail().sourceFileName()).isEqualTo("additional.pdf");
+        assertThat(result.detail().sourcePdfUrl()).isEqualTo("https://signed.example/source.pdf");
+        assertThat(result.detail().revisionSlides()).hasSize(1);
         verify(revision).resume();
     }
 

@@ -137,13 +137,32 @@ public class DocumentRevisionService {
 
     private DocumentRevisionDetailResponse revisionDetail(DocumentRevision revision, UUID documentId) {
         UUID revisionId = revision.getId();
+        List<RevisionSourceSlideResponse> revisionSlides = revisionSlideRepository
+                .findAllByRevisionIdOrderBySourcePageNumberAsc(revisionId).stream()
+                .map(slide -> new RevisionSourceSlideResponse(
+                        slide.getId(), slide.getSourcePageNumber(), storage.presignedGetUrl(slide.getThumbnailKey())))
+                .toList();
         List<RevisionPageResponse> pages = revisionPageRepository.findAllByRevisionIdOrderByPositionAsc(revisionId).stream()
                 .map(p -> new RevisionPageResponse(p.getId(), p.getPosition(), p.getSourceType(), p.getStatus(), storage.presignedGetUrl(p.getThumbnailKey()))).toList();
         List<com.tikitaka.document.entity.RevisionOperation> operations = revisionOperationRepository.findAllByRevisionIdOrderBySequenceAsc(revisionId);
         Integer cursor = revision.getOperationCursorSequence();
         boolean undo = cursor != null;
         boolean redo = operations.stream().anyMatch(o -> o.getState() == RevisionOperationState.UNDONE && (cursor == null || o.getSequence() > cursor));
-        return new DocumentRevisionDetailResponse(revisionId, documentId, revision.getStatus(), revision.getBaseDocumentVersion(), revision.getPreviewVersion(), revision.getDocument().getTitle(), pages, undo, redo);
+        String sourcePdfUrl = revision.getSourcePdfKey() == null ? null : storage.presignedGetUrl(revision.getSourcePdfKey());
+        return new DocumentRevisionDetailResponse(
+                revisionId,
+                documentId,
+                revision.getStatus(),
+                revision.getBaseDocumentVersion(),
+                revision.getPreviewVersion(),
+                revision.getDocument().getTitle(),
+                revision.getSourceFileName(),
+                sourcePdfUrl,
+                revision.getSourcePageCount(),
+                revisionSlides,
+                pages,
+                undo,
+                redo);
     }
 
     @Transactional
