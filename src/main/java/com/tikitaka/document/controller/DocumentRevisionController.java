@@ -4,6 +4,7 @@ import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -19,7 +20,6 @@ import com.tikitaka.document.dto.request.RevisionOperationRequest;
 import com.tikitaka.document.dto.request.RevisionPreviewVersionRequest;
 import com.tikitaka.document.dto.response.DocumentRevisionCancelResponse;
 import com.tikitaka.document.dto.response.DocumentRevisionCompleteResponse;
-import com.tikitaka.document.dto.response.DocumentRevisionCreateResponse;
 import com.tikitaka.document.dto.response.DocumentRevisionDetailResponse;
 import com.tikitaka.document.dto.response.RevisionOperationResponse;
 import com.tikitaka.document.dto.response.RevisionUndoRedoResponse;
@@ -41,11 +41,11 @@ public class DocumentRevisionController {
     private final DocumentRevisionService documentRevisionService;
     private final CurrentUserResolver currentUserResolver;
 
-    @Operation(summary = "MAT-006 강의자료 수정 세션 생성", description = "실제 Slide를 기준으로 편집용 RevisionPage를 생성합니다.")
+    @Operation(summary = "MAT-006 강의자료 수정 세션 생성 또는 재개", description = "새 수정 세션을 생성하거나 현재 사용자의 활성 수정 세션을 재개해 최신 편집 상태를 반환합니다.")
     @PostMapping("/api/v1/documents/{documentId}/revisions")
-    @ResponseStatus(HttpStatus.CREATED)
-    public DocumentRevisionCreateResponse createRevision(@PathVariable UUID documentId, Authentication authentication) {
-        return documentRevisionService.createRevision(documentId, currentUserResolver.resolve(authentication));
+    public ResponseEntity<DocumentRevisionDetailResponse> createRevision(@PathVariable UUID documentId, Authentication authentication) {
+        var result = documentRevisionService.createRevision(documentId, currentUserResolver.resolve(authentication));
+        return ResponseEntity.status(result.created() ? HttpStatus.CREATED : HttpStatus.OK).body(result.detail());
     }
 
     @Operation(summary = "MAT-007 삽입용 PDF 업로드", description = "수정 세션에 삽입할 PDF와 페이지별 미리보기 썸네일을 생성합니다.")
