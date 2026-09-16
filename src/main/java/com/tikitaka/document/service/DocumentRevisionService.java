@@ -16,7 +16,6 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
 
-import com.tikitaka.document.dto.response.DocumentRevisionCreateResponse;
 import com.tikitaka.document.dto.response.DocumentRevisionDetailResponse;
 import com.tikitaka.document.dto.response.RevisionPageResponse;
 import com.tikitaka.document.dto.response.RevisionSourceSlideResponse;
@@ -65,6 +64,8 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class DocumentRevisionService {
+    public record RevisionOpenResult(DocumentRevisionDetailResponse detail, boolean created) {}
+
     private final DocumentRepository documentRepository;
     private final DocumentRevisionRepository revisionRepository;
     private final RevisionPageRepository revisionPageRepository;
@@ -82,15 +83,27 @@ public class DocumentRevisionService {
     private Duration inactivityTimeout;
 
     @Transactional
-    public DocumentRevisionCreateResponse createRevision(UUID documentId, User user) {
+    public RevisionOpenResult createRevision(UUID documentId, User user) {
         Document document = document(documentId);
         requireManager(document, user);
-        if (revisionRepository.existsByDocumentIdAndStatusIn(documentId, List.of(RevisionStatus.EDITING, RevisionStatus.PROCESSING))) throw new BusinessException(DocumentErrorCode.REVISION_ALREADY_ACTIVE);
+        var active = revisionRepository.findFirstByDocumentIdAndStatusIn(
+                documentId, List.of(RevisionStatus.EDITING, RevisionStatus.PROCESSING));
+        if (active.isPresent()) {
+            DocumentRevision revision = active.get();
+            if (revision.getStatus() == RevisionStatus.PROCESSING) {
+                throw new BusinessException(DocumentErrorCode.REVISION_NOT_EDITABLE);
+            }
+            if (!revision.getEditor().getId().equals(user.getId())) {
+                throw new BusinessException(DocumentErrorCode.REVISION_ALREADY_ACTIVE);
+            }
+            revision.resume();
+            return new RevisionOpenResult(revisionDetail(revision, documentId), false);
+        }
         DocumentRevision revision = revisionRepository.save(DocumentRevision.create(document, user));
         List<RevisionPage> pages = slideRepository.findAllByDocumentIdOrderByPageNumberAsc(documentId).stream()
                 .map(slide -> RevisionPage.original(revision, slide.getPageNumber(), slide)).toList();
         revisionPageRepository.saveAll(pages);
-        return DocumentRevisionCreateResponse.from(revision);
+        return new RevisionOpenResult(revisionDetail(revision, documentId), true);
     }
 
     @Transactional
@@ -119,6 +132,11 @@ public class DocumentRevisionService {
 
     public DocumentRevisionDetailResponse getRevision(UUID documentId, UUID revisionId, User user) {
         DocumentRevision revision = revision(revisionId); verifyDocument(revision, documentId); requireManager(revision.getDocument(), user);
+        return revisionDetail(revision, documentId);
+    }
+
+    private DocumentRevisionDetailResponse revisionDetail(DocumentRevision revision, UUID documentId) {
+        UUID revisionId = revision.getId();
         List<RevisionPageResponse> pages = revisionPageRepository.findAllByRevisionIdOrderByPositionAsc(revisionId).stream()
                 .map(p -> new RevisionPageResponse(p.getId(), p.getPosition(), p.getSourceType(), p.getStatus(), storage.presignedGetUrl(p.getThumbnailKey()))).toList();
         List<com.tikitaka.document.entity.RevisionOperation> operations = revisionOperationRepository.findAllByRevisionIdOrderBySequenceAsc(revisionId);

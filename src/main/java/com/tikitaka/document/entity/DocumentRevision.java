@@ -101,6 +101,10 @@ public class DocumentRevision extends BaseTimeEntity {
         this.operationCursorSequence = sequence;
     }
 
+    public void resume() {
+        touchUpdatedAt();
+    }
+
     public void startProcessing() {
         this.status = RevisionStatus.PROCESSING;
     }

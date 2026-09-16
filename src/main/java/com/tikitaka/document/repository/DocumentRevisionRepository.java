@@ -32,6 +32,11 @@ public interface DocumentRevisionRepository
             List<RevisionStatus> statuses
     );
 
+    Optional<DocumentRevision> findFirstByDocumentIdAndStatusIn(
+            UUID documentId,
+            List<RevisionStatus> statuses
+    );
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
             select revision from DocumentRevision revision
