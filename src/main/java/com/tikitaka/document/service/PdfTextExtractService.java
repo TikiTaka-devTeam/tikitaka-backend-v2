@@ -1,7 +1,5 @@
 package com.tikitaka.document.service;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -16,15 +14,13 @@ import com.tikitaka.document.ai.dto.DocumentAnalyzeRequest;
 public class PdfTextExtractService {
 
     public List<DocumentAnalyzeRequest.PageContent> extractPages(
-            Path pdfPath
+            byte[] pdfBytes
     ) {
-        validatePdfPath(pdfPath);
+        validatePdfBytes(pdfBytes);
 
         try (
                 PDDocument document =
-                        Loader.loadPDF(
-                                pdfPath.toFile()
-                        )
+                        Loader.loadPDF(pdfBytes)
         ) {
             PDFTextStripper stripper =
                     new PDFTextStripper();
@@ -69,16 +65,14 @@ public class PdfTextExtractService {
         }
     }
 
-    private void validatePdfPath(
-            Path pdfPath
+    private void validatePdfBytes(
+            byte[] pdfBytes
     ) {
-        if (
-                pdfPath == null
-                        || !Files.exists(pdfPath)
-                        || !Files.isRegularFile(pdfPath)
-        ) {
+        if (pdfBytes == null
+                || pdfBytes.length == 0) {
+
             throw new IllegalArgumentException(
-                    "PDF file does not exist."
+                    "PDF bytes must not be empty."
             );
         }
     }

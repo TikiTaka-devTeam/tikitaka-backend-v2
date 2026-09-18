@@ -1,6 +1,5 @@
 package com.tikitaka.document.service;
 
-import java.nio.file.Path;
 import java.util.List;
 import java.util.UUID;
 
@@ -30,16 +29,9 @@ public class DocumentAiProcessingService {
 
     private final TransactionTemplate transactionTemplate;
 
-    /**
-     * 강의자료 AI 분석 전체 흐름.
-     *
-     * PDF Text 추출
-     * → Python AI 호출
-     * → Category 저장
-     */
     public void process(
             UUID documentId,
-            Path pdfPath
+            byte[] pdfBytes
     ) {
         Document document =
                 documentRepository.findById(documentId)
@@ -50,7 +42,9 @@ public class DocumentAiProcessingService {
                         );
 
         List<DocumentAnalyzeRequest.PageContent> pages =
-                pdfTextExtractService.extractPages(pdfPath);
+                pdfTextExtractService.extractPages(
+                        pdfBytes
+                );
 
         validatePages(pages);
 
@@ -62,7 +56,9 @@ public class DocumentAiProcessingService {
                 );
 
         DocumentAnalyzeResponse response =
-                documentAiClient.analyzeDocument(request);
+                documentAiClient.analyzeDocument(
+                        request
+                );
 
         validateResponse(response);
 
@@ -74,9 +70,6 @@ public class DocumentAiProcessingService {
         );
     }
 
-    /**
-     * AI가 반환한 Category 저장.
-     */
     private void saveCategories(
             UUID documentId,
             List<DocumentCategoryResult> results
@@ -112,17 +105,18 @@ public class DocumentAiProcessingService {
                             result.sourcePages()
                     );
 
-            questionCategoryRepository.save(category);
+            questionCategoryRepository.save(
+                    category
+            );
         }
     }
 
-    /**
-     * PDF에서 추출한 페이지 검증.
-     */
     private void validatePages(
             List<DocumentAnalyzeRequest.PageContent> pages
     ) {
-        if (pages == null || pages.isEmpty()) {
+        if (pages == null
+                || pages.isEmpty()) {
+
             throw new IllegalStateException(
                     "PDF pages must not be empty."
             );
@@ -142,9 +136,6 @@ public class DocumentAiProcessingService {
         }
     }
 
-    /**
-     * AI 응답 검증.
-     */
     private void validateResponse(
             DocumentAnalyzeResponse response
     ) {

@@ -4,8 +4,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
-import org.springframework.stereotype.Service;
 import org.springframework.http.MediaType;
+import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -24,11 +24,11 @@ import com.tikitaka.document.pdf.ProcessedPdf;
 import com.tikitaka.document.repository.DocumentRepository;
 import com.tikitaka.document.repository.SlideRepository;
 import com.tikitaka.document.storage.DocumentStorage;
-import com.tikitaka.global.s3.S3ObjectNames;
-import com.tikitaka.notification.service.NotificationService;
 import com.tikitaka.global.exception.BusinessException;
 import com.tikitaka.global.s3.FileUploadType;
 import com.tikitaka.global.s3.S3FileValidator;
+import com.tikitaka.global.s3.S3ObjectNames;
+import com.tikitaka.notification.service.NotificationService;
 import com.tikitaka.search.entity.RecentDocumentView;
 import com.tikitaka.search.repository.RecentDocumentViewRepository;
 import com.tikitaka.space.entity.PermissionType;
@@ -40,32 +40,54 @@ import com.tikitaka.space.repository.SpaceMemberRepository;
 import com.tikitaka.user.entity.User;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class DocumentService {
+
     private final DocumentRepository documentRepository;
     private final SlideRepository slideRepository;
     private final RecentDocumentViewRepository recentDocumentViewRepository;
+
     private final SpaceMemberRepository spaceMemberRepository;
     private final SpaceMemberPermissionRepository permissionRepository;
+
     private final S3FileValidator fileValidator;
     private final PdfProcessor pdfProcessor;
     private final DocumentStorage storage;
+
     private final NotificationService notificationService;
 
-    public List<DocumentListItemResponse> getDocuments(UUID spaceId, User currentUser) {
-        requireApprovedMember(spaceId, currentUser);
+    private final DocumentAiProcessingService documentAiProcessingService;
 
-        return documentRepository.findAllBySpaceIdOrderByCreatedAtDescIdDesc(spaceId)
+    public List<DocumentListItemResponse> getDocuments(
+            UUID spaceId,
+            User currentUser
+    ) {
+        requireApprovedMember(
+                spaceId,
+                currentUser
+        );
+
+        return documentRepository
+                .findAllBySpaceIdOrderByCreatedAtDescIdDesc(
+                        spaceId
+                )
                 .stream()
-                .map(document -> new DocumentListItemResponse(
-                        document.getId(),
-                        document.getTitle(),
-                        storage.presignedGetUrl(document.getThumbnailKey()),
-                        document.getPageCount(),
-                        document.getCreatedAt()))
+                .map(document ->
+                        new DocumentListItemResponse(
+                                document.getId(),
+                                document.getTitle(),
+                                storage.presignedGetUrl(
+                                        document.getThumbnailKey()
+                                ),
+                                document.getPageCount(),
+                                document.getCreatedAt()
+                        )
+                )
                 .toList();
     }
 
@@ -76,180 +98,518 @@ public class DocumentService {
             MultipartFile file,
             User currentUser
     ) {
-        SpaceMember member = requireDocumentManager(spaceId, currentUser);
-        String normalizedTitle = normalizeTitle(title);
-        fileValidator.validate(file, FileUploadType.LECTURE_DOCUMENT);
-        ProcessedPdf processed = pdfProcessor.process(file);
+        SpaceMember member =
+                requireDocumentManager(
+                        spaceId,
+                        currentUser
+                );
 
-        String assetId = UUID.randomUUID().toString();
-        String root = "documents/assets/" + assetId;
-        String pdfKey = root + "/original.pdf";
-        String documentThumbnailKey = root + "/" + S3ObjectNames.imageFilename(normalizedTitle, "썸네일", ".png");
-        List<String> uploadedKeys = new ArrayList<>();
+        String normalizedTitle =
+                normalizeTitle(title);
+
+        fileValidator.validate(
+                file,
+                FileUploadType.LECTURE_DOCUMENT
+        );
+
+        ProcessedPdf processed =
+                pdfProcessor.process(file);
+
+        String assetId =
+                UUID.randomUUID()
+                        .toString();
+
+        String root =
+                "documents/assets/"
+                        + assetId;
+
+        String pdfKey =
+                root
+                        + "/original.pdf";
+
+        String documentThumbnailKey =
+                root
+                        + "/"
+                        + S3ObjectNames.imageFilename(
+                                normalizedTitle,
+                                "썸네일",
+                                ".png"
+                        );
+
+        List<String> uploadedKeys =
+                new ArrayList<>();
 
         try {
-            storage.put(pdfKey, processed.originalBytes(), MediaType.APPLICATION_PDF_VALUE);
-            uploadedKeys.add(pdfKey);
-
-            storage.put(documentThumbnailKey, processed.pageThumbnails().get(0), MediaType.IMAGE_PNG_VALUE);
-            uploadedKeys.add(documentThumbnailKey);
-
-            List<String> slideKeys = new ArrayList<>(processed.pageCount());
-            for (int index = 0; index < processed.pageCount(); index++) {
-                String slideKey = root + "/slides/" + S3ObjectNames.imageFilename(normalizedTitle, "슬라이드_" + (index + 1), ".png");
-                storage.put(slideKey, processed.pageThumbnails().get(index), MediaType.IMAGE_PNG_VALUE);
-                uploadedKeys.add(slideKey);
-                slideKeys.add(slideKey);
-            }
-
-            Document document = documentRepository.save(Document.create(
-                    member.getSpace(),
-                    normalizedTitle,
-                    documentThumbnailKey,
+            storage.put(
                     pdfKey,
-                    processed.pageCount()));
-
-            List<Slide> slides = new ArrayList<>(processed.pageCount());
-            for (int index = 0; index < processed.pageCount(); index++) {
-                slides.add(Slide.create(document, index + 1, slideKeys.get(index)));
-            }
-            slideRepository.saveAll(slides);
-            deleteAfterRollback(uploadedKeys);
-
-            notificationService.createDocumentUploadedNotification(
-                    member.getSpace(),
-                    document.getId()
+                    processed.originalBytes(),
+                    MediaType.APPLICATION_PDF_VALUE
             );
+
+            uploadedKeys.add(
+                    pdfKey
+            );
+
+            storage.put(
+                    documentThumbnailKey,
+                    processed
+                            .pageThumbnails()
+                            .get(0),
+                    MediaType.IMAGE_PNG_VALUE
+            );
+
+            uploadedKeys.add(
+                    documentThumbnailKey
+            );
+
+            List<String> slideKeys =
+                    new ArrayList<>(
+                            processed.pageCount()
+                    );
+
+            for (
+                    int index = 0;
+                    index < processed.pageCount();
+                    index++
+            ) {
+                String slideKey =
+                        root
+                                + "/slides/"
+                                + S3ObjectNames.imageFilename(
+                                        normalizedTitle,
+                                        "슬라이드_"
+                                                + (index + 1),
+                                        ".png"
+                                );
+
+                storage.put(
+                        slideKey,
+                        processed
+                                .pageThumbnails()
+                                .get(index),
+                        MediaType.IMAGE_PNG_VALUE
+                );
+
+                uploadedKeys.add(
+                        slideKey
+                );
+
+                slideKeys.add(
+                        slideKey
+                );
+            }
+
+            Document document =
+                    documentRepository.save(
+                            Document.create(
+                                    member.getSpace(),
+                                    normalizedTitle,
+                                    documentThumbnailKey,
+                                    pdfKey,
+                                    processed.pageCount()
+                            )
+                    );
+
+            List<Slide> slides =
+                    new ArrayList<>(
+                            processed.pageCount()
+                    );
+
+            for (
+                    int index = 0;
+                    index < processed.pageCount();
+                    index++
+            ) {
+                slides.add(
+                        Slide.create(
+                                document,
+                                index + 1,
+                                slideKeys.get(index)
+                        )
+                );
+            }
+
+            slideRepository.saveAll(
+                    slides
+            );
+
+            deleteAfterRollback(
+                    uploadedKeys
+            );
+
+            registerDocumentAiProcessingAfterCommit(
+                    document.getId(),
+                    processed.originalBytes()
+            );
+
+            notificationService
+                    .createDocumentUploadedNotification(
+                            member.getSpace(),
+                            document.getId()
+                    );
 
             return new DocumentCreateResponse(
                     document.getId(),
                     document.getTitle(),
-                    storage.presignedGetUrl(document.getThumbnailKey()),
+                    storage.presignedGetUrl(
+                            document.getThumbnailKey()
+                    ),
                     document.getPageCount(),
-                    document.getCreatedAt());
+                    document.getCreatedAt()
+            );
+
         } catch (RuntimeException exception) {
-            cleanup(uploadedKeys, exception);
+
+            cleanup(
+                    uploadedKeys,
+                    exception
+            );
+
             throw exception;
         }
     }
 
     @Transactional
-    public DocumentDownloadResponse downloadDocument(UUID documentId, User currentUser) {
-        Document document = getDocument(documentId);
-        requireApprovedMember(document.getSpace().getId(), currentUser);
+    public DocumentDownloadResponse downloadDocument(
+            UUID documentId,
+            User currentUser
+    ) {
+        Document document =
+                getDocument(
+                        documentId
+                );
 
-        recentDocumentViewRepository.findByUserIdAndDocumentId(currentUser.getId(), documentId)
+        requireApprovedMember(
+                document.getSpace()
+                        .getId(),
+                currentUser
+        );
+
+        recentDocumentViewRepository
+                .findByUserIdAndDocumentId(
+                        currentUser.getId(),
+                        documentId
+                )
                 .ifPresentOrElse(
-                        RecentDocumentView::refreshViewedAt,
-                        () -> recentDocumentViewRepository.save(
-                                RecentDocumentView.create(currentUser, document)));
 
-        return new DocumentDownloadResponse(storage.presignedGetUrl(document.getPdfKey()));
+                        RecentDocumentView::refreshViewedAt,
+
+                        () ->
+                                recentDocumentViewRepository.save(
+                                        RecentDocumentView.create(
+                                                currentUser,
+                                                document
+                                        )
+                                )
+                );
+
+        return new DocumentDownloadResponse(
+                storage.presignedGetUrl(
+                        document.getPdfKey()
+                )
+        );
     }
 
-    public DocumentSlidesResponse getSlides(UUID documentId, User currentUser) {
-        Document document = getDocument(documentId);
-        requireApprovedMember(document.getSpace().getId(), currentUser);
+    public DocumentSlidesResponse getSlides(
+            UUID documentId,
+            User currentUser
+    ) {
+        Document document =
+                getDocument(
+                        documentId
+                );
 
-        List<DocumentSlideResponse> slides = slideRepository.findAllByDocumentIdOrderByPageNumberAsc(documentId)
-                .stream()
-                .map(slide -> new DocumentSlideResponse(
-                        slide.getId(),
-                        slide.getPageNumber(),
-                        slide.getStatus()))
-                .toList();
+        requireApprovedMember(
+                document.getSpace()
+                        .getId(),
+                currentUser
+        );
+
+        List<DocumentSlideResponse> slides =
+                slideRepository
+                        .findAllByDocumentIdOrderByPageNumberAsc(
+                                documentId
+                        )
+                        .stream()
+                        .map(slide ->
+                                new DocumentSlideResponse(
+                                        slide.getId(),
+                                        slide.getPageNumber(),
+                                        slide.getStatus()
+                                )
+                        )
+                        .toList();
 
         return new DocumentSlidesResponse(
                 documentId,
-                storage.presignedGetUrl(document.getPdfKey()),
+                storage.presignedGetUrl(
+                        document.getPdfKey()
+                ),
                 document.getPageCount(),
-                slides);
+                slides
+        );
     }
 
     @Transactional
-    public void deleteDocument(UUID documentId, User currentUser) {
-        Document document = getDocument(documentId);
-        requireDocumentManager(document.getSpace().getId(), currentUser);
+    public void deleteDocument(
+            UUID documentId,
+            User currentUser
+    ) {
+        Document document =
+                getDocument(
+                        documentId
+                );
 
-        List<String> keys = new ArrayList<>();
-        keys.add(document.getPdfKey());
-        keys.add(document.getThumbnailKey());
-        List<Slide> slides = slideRepository.findAllByDocumentIdOrderByPageNumberAsc(documentId);
+        requireDocumentManager(
+                document.getSpace()
+                        .getId(),
+                currentUser
+        );
+
+        List<String> keys =
+                new ArrayList<>();
+
+        keys.add(
+                document.getPdfKey()
+        );
+
+        keys.add(
+                document.getThumbnailKey()
+        );
+
+        List<Slide> slides =
+                slideRepository
+                        .findAllByDocumentIdOrderByPageNumberAsc(
+                                documentId
+                        );
+
         slides.stream()
-                .map(Slide::getThumbnailKey)
-                .forEach(keys::add);
+                .map(
+                        Slide::getThumbnailKey
+                )
+                .forEach(
+                        keys::add
+                );
 
-        // Remove managed slides before their required document association is removed.
-        slideRepository.deleteAll(slides);
-        documentRepository.delete(document);
-        deleteAfterCommit(keys);
+        slideRepository.deleteAll(
+                slides
+        );
+
+        documentRepository.delete(
+                document
+        );
+
+        deleteAfterCommit(
+                keys
+        );
     }
 
-    private Document getDocument(UUID documentId) {
-        return documentRepository.findById(documentId)
-                .orElseThrow(() -> new BusinessException(DocumentErrorCode.DOCUMENT_NOT_FOUND));
+    private Document getDocument(
+            UUID documentId
+    ) {
+        return documentRepository
+                .findById(
+                        documentId
+                )
+                .orElseThrow(() ->
+                        new BusinessException(
+                                DocumentErrorCode
+                                        .DOCUMENT_NOT_FOUND
+                        )
+                );
     }
 
-    private SpaceMember requireApprovedMember(UUID spaceId, User currentUser) {
+    private SpaceMember requireApprovedMember(
+            UUID spaceId,
+            User currentUser
+    ) {
         return spaceMemberRepository
                 .findBySpaceIdAndUserIdAndStatusAndRemovedAtIsNull(
-                        spaceId, currentUser.getId(), SpaceMemberStatus.APPROVED)
-                .orElseThrow(() -> new BusinessException(DocumentErrorCode.DOCUMENT_ACCESS_DENIED));
+                        spaceId,
+                        currentUser.getId(),
+                        SpaceMemberStatus.APPROVED
+                )
+                .orElseThrow(() ->
+                        new BusinessException(
+                                DocumentErrorCode
+                                        .DOCUMENT_ACCESS_DENIED
+                        )
+                );
     }
 
-    private SpaceMember requireDocumentManager(UUID spaceId, User currentUser) {
-        SpaceMember member = requireApprovedMember(spaceId, currentUser);
-        if (member.getRole() == SpaceMemberRole.PROFESSOR) {
+    private SpaceMember requireDocumentManager(
+            UUID spaceId,
+            User currentUser
+    ) {
+        SpaceMember member =
+                requireApprovedMember(
+                        spaceId,
+                        currentUser
+                );
+
+        if (
+                member.getRole()
+                        == SpaceMemberRole.PROFESSOR
+        ) {
             return member;
         }
-        if (member.getRole() == SpaceMemberRole.ASSISTANT
-                && permissionRepository.existsBySpaceMemberIdAndPermission(
-                        member.getId(), PermissionType.LECTURE_MATERIAL_MANAGE)) {
+
+        if (
+                member.getRole()
+                        == SpaceMemberRole.ASSISTANT
+                        && permissionRepository
+                        .existsBySpaceMemberIdAndPermission(
+                                member.getId(),
+                                PermissionType
+                                        .LECTURE_MATERIAL_MANAGE
+                        )
+        ) {
             return member;
         }
-        throw new BusinessException(DocumentErrorCode.DOCUMENT_ACCESS_DENIED);
+
+        throw new BusinessException(
+                DocumentErrorCode
+                        .DOCUMENT_ACCESS_DENIED
+        );
     }
 
-    private String normalizeTitle(String title) {
+    private String normalizeTitle(
+            String title
+    ) {
         if (title == null) {
-            throw new BusinessException(DocumentErrorCode.INVALID_DOCUMENT_TITLE);
+            throw new BusinessException(
+                    DocumentErrorCode
+                            .INVALID_DOCUMENT_TITLE
+            );
         }
-        String normalized = title.trim();
-        if (normalized.isEmpty() || normalized.length() > 255) {
-            throw new BusinessException(DocumentErrorCode.INVALID_DOCUMENT_TITLE);
+
+        String normalized =
+                title.trim();
+
+        if (
+                normalized.isEmpty()
+                        || normalized.length() > 255
+        ) {
+            throw new BusinessException(
+                    DocumentErrorCode
+                            .INVALID_DOCUMENT_TITLE
+            );
         }
+
         return normalized;
     }
 
-    private void deleteAfterRollback(List<String> keys) {
-        List<String> immutableKeys = List.copyOf(keys);
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCompletion(int status) {
-                if (status == TransactionSynchronization.STATUS_ROLLED_BACK) {
-                    cleanup(immutableKeys, null);
-                }
-            }
-        });
+    /**
+     * Document 저장 Transaction이 성공한 뒤에만
+     * 강의자료 AI 분석을 시작한다.
+     *
+     * AI 처리 실패가 이미 등록된 강의자료를
+     * Rollback시키지 않도록 분리한다.
+     */
+    private void registerDocumentAiProcessingAfterCommit(
+            UUID documentId,
+            byte[] pdfBytes
+    ) {
+        byte[] copiedPdfBytes =
+                pdfBytes.clone();
+
+        TransactionSynchronizationManager
+                .registerSynchronization(
+                        new TransactionSynchronization() {
+
+                            @Override
+                            public void afterCommit() {
+
+                                try {
+                                    documentAiProcessingService
+                                            .process(
+                                                    documentId,
+                                                    copiedPdfBytes
+                                            );
+
+                                } catch (Exception exception) {
+
+                                    log.warn(
+                                            "Document AI processing failed. documentId={}",
+                                            documentId,
+                                            exception
+                                    );
+                                }
+                            }
+                        }
+                );
     }
 
-    private void deleteAfterCommit(List<String> keys) {
-        List<String> immutableKeys = List.copyOf(keys);
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCommit() {
-                cleanup(immutableKeys, null);
-            }
-        });
+    private void deleteAfterRollback(
+            List<String> keys
+    ) {
+        List<String> immutableKeys =
+                List.copyOf(keys);
+
+        TransactionSynchronizationManager
+                .registerSynchronization(
+                        new TransactionSynchronization() {
+
+                            @Override
+                            public void afterCompletion(
+                                    int status
+                            ) {
+                                if (
+                                        status
+                                                == TransactionSynchronization
+                                                .STATUS_ROLLED_BACK
+                                ) {
+                                    cleanup(
+                                            immutableKeys,
+                                            null
+                                    );
+                                }
+                            }
+                        }
+                );
     }
 
-    private void cleanup(List<String> keys, RuntimeException original) {
+    private void deleteAfterCommit(
+            List<String> keys
+    ) {
+        List<String> immutableKeys =
+                List.copyOf(keys);
+
+        TransactionSynchronizationManager
+                .registerSynchronization(
+                        new TransactionSynchronization() {
+
+                            @Override
+                            public void afterCommit() {
+
+                                cleanup(
+                                        immutableKeys,
+                                        null
+                                );
+                            }
+                        }
+                );
+    }
+
+    private void cleanup(
+            List<String> keys,
+            RuntimeException original
+    ) {
         for (String key : keys) {
+
             try {
-                storage.delete(key);
-            } catch (RuntimeException cleanupFailure) {
+                storage.delete(
+                        key
+                );
+
+            } catch (
+                    RuntimeException cleanupFailure
+            ) {
+
                 if (original != null) {
-                    original.addSuppressed(cleanupFailure);
+                    original.addSuppressed(
+                            cleanupFailure
+                    );
                 }
             }
         }
