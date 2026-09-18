@@ -1,5 +1,6 @@
 package com.tikitaka.question.repository;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -13,16 +14,22 @@ import com.tikitaka.question.repository.projection.ClusterSimilarityProjection;
 public interface QuestionClusterRepository
         extends JpaRepository<QuestionCluster, UUID> {
 
+    List<QuestionCluster> findAllByDocumentIdOrderByCreatedAtAsc(
+            UUID documentId
+    );
+
     @Query(
             value = """
                     SELECT
                         qc.id AS clusterId,
-                        1 - (qc.centroid <=> CAST(:embedding AS vector))
-                            AS similarity
+                        1 - (
+                            qc.centroid <=> CAST(:embedding AS vector)
+                        ) AS similarity
                     FROM question_clusters qc
                     WHERE qc.document_id = :documentId
                       AND qc.category_id = :categoryId
-                    ORDER BY qc.centroid <=> CAST(:embedding AS vector)
+                    ORDER BY
+                        qc.centroid <=> CAST(:embedding AS vector)
                     LIMIT 1
                     """,
             nativeQuery = true
