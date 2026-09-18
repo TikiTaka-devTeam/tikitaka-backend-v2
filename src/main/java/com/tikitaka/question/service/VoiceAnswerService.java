@@ -46,8 +46,7 @@ public class VoiceAnswerService {
                     "mp3",
                     "wav",
                     "m4a",
-                    "webm",
-                    "ogg"
+                    "webm"
             );
 
     private static final Set<String> ALLOWED_CONTENT_TYPES =
@@ -59,7 +58,6 @@ public class VoiceAnswerService {
                     "audio/mp4",
                     "audio/x-m4a",
                     "audio/webm",
-                    "audio/ogg",
                     "video/webm"
             );
 
