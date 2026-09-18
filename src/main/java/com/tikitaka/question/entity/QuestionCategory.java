@@ -1,7 +1,11 @@
 package com.tikitaka.question.entity;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
+
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import com.tikitaka.document.entity.Document;
 import com.tikitaka.global.common.entity.BaseTimeEntity;
@@ -47,8 +51,9 @@ public class QuestionCategory extends BaseTimeEntity {
     @Column(name = "source_type", nullable = false, length = 20)
     private CategorySourceType sourceType = CategorySourceType.MANUAL;
 
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "source_pages", columnDefinition = "jsonb")
-    private String sourcePages;
+    private List<Integer> sourcePages;
 
     @Column(name = "is_deleted", nullable = false)
     private boolean deleted = false;
@@ -61,7 +66,7 @@ public class QuestionCategory extends BaseTimeEntity {
             String name,
             User createdBy,
             CategorySourceType sourceType,
-            String sourcePages
+            List<Integer> sourcePages
     ) {
         this.document = document;
         this.name = name;
@@ -87,7 +92,7 @@ public class QuestionCategory extends BaseTimeEntity {
     public static QuestionCategory createByAi(
             Document document,
             String name,
-            String sourcePages
+            List<Integer> sourcePages
     ) {
         return new QuestionCategory(
                 document,

@@ -7,8 +7,6 @@ import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tikitaka.document.ai.DocumentAiClient;
 import com.tikitaka.document.ai.dto.DocumentAnalyzeRequest;
 import com.tikitaka.document.ai.dto.DocumentAnalyzeResponse;
@@ -30,9 +28,15 @@ public class DocumentAiProcessingService {
     private final DocumentRepository documentRepository;
     private final QuestionCategoryRepository questionCategoryRepository;
 
-    private final ObjectMapper objectMapper;
     private final TransactionTemplate transactionTemplate;
 
+    /**
+     * 강의자료 AI 분석 전체 흐름.
+     *
+     * PDF Text 추출
+     * → Python AI 호출
+     * → Category 저장
+     */
     public void process(
             UUID documentId,
             Path pdfPath
@@ -70,6 +74,9 @@ public class DocumentAiProcessingService {
         );
     }
 
+    /**
+     * AI가 반환한 Category 저장.
+     */
     private void saveCategories(
             UUID documentId,
             List<DocumentCategoryResult> results
@@ -87,47 +94,31 @@ public class DocumentAiProcessingService {
             String name =
                     result.name().trim();
 
-            if (questionCategoryRepository
-                    .existsByDocumentIdAndNameAndDeletedFalse(
-                            documentId,
-                            name
-                    )) {
+            boolean alreadyExists =
+                    questionCategoryRepository
+                            .existsByDocumentIdAndNameAndDeletedFalse(
+                                    documentId,
+                                    name
+                            );
+
+            if (alreadyExists) {
                 continue;
             }
-
-            String sourcePages =
-                    serializeSourcePages(
-                            result.sourcePages()
-                    );
 
             QuestionCategory category =
                     QuestionCategory.createByAi(
                             document,
                             name,
-                            sourcePages
+                            result.sourcePages()
                     );
 
             questionCategoryRepository.save(category);
         }
     }
 
-    private String serializeSourcePages(
-            List<Integer> sourcePages
-    ) {
-        try {
-            return objectMapper.writeValueAsString(
-                    sourcePages
-            );
-
-        } catch (JsonProcessingException exception) {
-
-            throw new IllegalStateException(
-                    "Failed to serialize category source pages.",
-                    exception
-            );
-        }
-    }
-
+    /**
+     * PDF에서 추출한 페이지 검증.
+     */
     private void validatePages(
             List<DocumentAnalyzeRequest.PageContent> pages
     ) {
@@ -151,6 +142,9 @@ public class DocumentAiProcessingService {
         }
     }
 
+    /**
+     * AI 응답 검증.
+     */
     private void validateResponse(
             DocumentAnalyzeResponse response
     ) {
@@ -169,35 +163,47 @@ public class DocumentAiProcessingService {
         for (DocumentCategoryResult category :
                 response.categories()) {
 
-            if (category.name() == null
-                    || category.name().isBlank()) {
+            validateCategory(category);
+        }
+    }
 
-                throw new IllegalStateException(
-                        "AI category name must not be empty."
-                );
-            }
+    private void validateCategory(
+            DocumentCategoryResult category
+    ) {
+        if (category == null) {
+            throw new IllegalStateException(
+                    "AI category must not be null."
+            );
+        }
 
-            if (category.sourcePages() == null
-                    || category.sourcePages().isEmpty()) {
+        if (category.name() == null
+                || category.name().isBlank()) {
 
-                throw new IllegalStateException(
-                        "AI category source pages must not be empty."
-                );
-            }
+            throw new IllegalStateException(
+                    "AI category name must not be empty."
+            );
+        }
 
-            boolean invalidPage =
-                    category.sourcePages()
-                            .stream()
-                            .anyMatch(page ->
-                                    page == null
-                                            || page <= 0
-                            );
+        if (category.sourcePages() == null
+                || category.sourcePages().isEmpty()) {
 
-            if (invalidPage) {
-                throw new IllegalStateException(
-                        "AI category source page must be positive."
-                );
-            }
+            throw new IllegalStateException(
+                    "AI category source pages must not be empty."
+            );
+        }
+
+        boolean invalidPage =
+                category.sourcePages()
+                        .stream()
+                        .anyMatch(page ->
+                                page == null
+                                        || page <= 0
+                        );
+
+        if (invalidPage) {
+            throw new IllegalStateException(
+                    "AI category source page must be positive."
+            );
         }
     }
 }
