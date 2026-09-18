@@ -8,6 +8,8 @@ import com.tikitaka.user.entity.User;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -37,23 +39,55 @@ public class Answer extends BaseTimeEntity {
     @JoinColumn(name = "author_id", nullable = false)
     private User author;
 
-    @Column(nullable = false, columnDefinition = "TEXT")
+    @Column(nullable = false, columnDefinition = "text")
     private String content;
 
-    @Column(name = "is_deleted", nullable = false)
+    @Enumerated(EnumType.STRING)
+    @Column(
+            name = "answer_type",
+            nullable = false,
+            length = 20
+    )
+    private AnswerType answerType =
+            AnswerType.TEXT;
+
+    @Column(
+            name = "audio_url",
+            columnDefinition = "text"
+    )
+    private String audioUrl;
+
+    @Column(
+            name = "transcript",
+            columnDefinition = "text"
+    )
+    private String transcript;
+
+    @Column(
+            name = "is_deleted",
+            nullable = false
+    )
     private boolean deleted = false;
 
-    @Column(name = "deleted_at")
+    @Column(
+            name = "deleted_at"
+    )
     private Instant deletedAt;
 
     private Answer(
             Question question,
             User author,
-            String content
+            String content,
+            AnswerType answerType,
+            String audioUrl,
+            String transcript
     ) {
         this.question = question;
         this.author = author;
         this.content = content;
+        this.answerType = answerType;
+        this.audioUrl = audioUrl;
+        this.transcript = transcript;
     }
 
     public static Answer create(
@@ -61,10 +95,48 @@ public class Answer extends BaseTimeEntity {
             User author,
             String content
     ) {
-        return new Answer(question, author, content);
+        return createText(
+                question,
+                author,
+                content
+        );
     }
 
-    public void updateContent(String content) {
+    public static Answer createText(
+            Question question,
+            User author,
+            String content
+    ) {
+        return new Answer(
+                question,
+                author,
+                content,
+                AnswerType.TEXT,
+                null,
+                null
+        );
+    }
+
+    public static Answer createVoice(
+            Question question,
+            User author,
+            String content,
+            String audioUrl,
+            String transcript
+    ) {
+        return new Answer(
+                question,
+                author,
+                content,
+                AnswerType.VOICE,
+                audioUrl,
+                transcript
+        );
+    }
+
+    public void updateContent(
+            String content
+    ) {
         this.content = content;
     }
 
