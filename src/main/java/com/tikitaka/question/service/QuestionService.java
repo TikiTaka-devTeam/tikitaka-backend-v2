@@ -7,10 +7,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Comparator;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Locale;
-import java.util.Set;
 import java.util.UUID;
 
 import org.springframework.stereotype.Service;
@@ -75,6 +72,7 @@ public class QuestionService {
     private final CursorCodec cursorCodec;
 
     private final QuestionAiProcessingService questionAiProcessingService;
+    private final SimilarQuestionService similarQuestionService;
     private final TransactionTemplate transactionTemplate;
 
     public enum QuestionSortType {
@@ -475,7 +473,9 @@ public class QuestionService {
 
         if (request.slideId() != null) {
             Slide slide =
-                    getSlide(request.slideId());
+                    getSlide(
+                            request.slideId()
+                    );
 
             if (!slide.getDocument()
                     .getId()
@@ -484,48 +484,28 @@ public class QuestionService {
             }
         }
 
-        Set<String> source =
-                tokens(
-                        request.title()
-                                + " "
-                                + request.content()
-                );
-
         List<SimilarItem> found =
-                questions
-                        .findAllByDocumentIdAndDeletedFalse(
-                                request.documentId()
+                similarQuestionService
+                        .findSimilarQuestions(
+                                request.documentId(),
+                                request.title(),
+                                request.content()
                         )
                         .stream()
-                        .map(q ->
-                                new SimilarItem(
-                                        q.getId(),
-                                        q.getTitle(),
-                                        q.getContent(),
-                                        categoryInfo(q),
-                                        q.getStatus(),
-                                        q.getLikeCount(),
-                                        jaccard(
-                                                source,
-                                                tokens(
-                                                        q.getTitle()
-                                                                + " "
-                                                                + q.getContent()
-                                                )
-                                        )
-                                )
-                        )
-                        .filter(item ->
-                                item.similarity() >= 0.2
-                        )
-                        .sorted(
-                                Comparator
-                                        .comparingDouble(
-                                                SimilarItem::similarity
-                                        )
-                                        .reversed()
-                        )
-                        .limit(5)
+                        .map(result -> {
+                            Question question =
+                                    result.question();
+
+                            return new SimilarItem(
+                                    question.getId(),
+                                    question.getTitle(),
+                                    question.getContent(),
+                                    categoryInfo(question),
+                                    question.getStatus(),
+                                    question.getLikeCount(),
+                                    result.similarity()
+                            );
+                        })
                         .toList();
 
         return new SimilarResponse(found);
@@ -1557,51 +1537,6 @@ public class QuestionService {
         throw new BusinessException(
                 errorCode
         );
-    }
-
-    private Set<String> tokens(
-            String value
-    ) {
-        Set<String> out =
-                new HashSet<>();
-
-        for (String token :
-                value.toLowerCase(
-                                Locale.ROOT
-                        )
-                        .split(
-                                "[^\\p{L}\\p{N}]+"
-                        )) {
-
-            if (token.length() > 1) {
-                out.add(token);
-            }
-        }
-
-        return out;
-    }
-
-    private double jaccard(
-            Set<String> a,
-            Set<String> b
-    ) {
-        if (a.isEmpty()
-                && b.isEmpty()) {
-            return 0;
-        }
-
-        Set<String> intersection =
-                new HashSet<>(a);
-
-        intersection.retainAll(b);
-
-        Set<String> union =
-                new HashSet<>(a);
-
-        union.addAll(b);
-
-        return (double) intersection.size()
-                / union.size();
     }
 
     private String quote(
