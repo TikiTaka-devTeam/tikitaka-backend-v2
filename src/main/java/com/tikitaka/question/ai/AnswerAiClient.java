@@ -2,6 +2,8 @@ package com.tikitaka.question.ai;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ByteArrayResource;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.util.LinkedMultiValueMap;
@@ -18,12 +20,16 @@ public class AnswerAiClient {
 
     public AnswerAiClient(
             RestClient.Builder builder,
-            @Value("${ai.base-url:http://localhost:8000}")
+            @Value(
+                    "${ai.base-url:http://localhost:8000}"
+            )
             String aiBaseUrl
     ) {
         this.restClient =
                 builder
-                        .baseUrl(aiBaseUrl)
+                        .baseUrl(
+                                aiBaseUrl
+                        )
                         .build();
     }
 
@@ -34,7 +40,8 @@ public class AnswerAiClient {
     ) {
         validateAudio(
                 audioBytes,
-                filename
+                filename,
+                contentType
         );
 
         ByteArrayResource audioResource =
@@ -47,12 +54,36 @@ public class AnswerAiClient {
                     }
                 };
 
+        HttpHeaders partHeaders =
+                new HttpHeaders();
+
+        partHeaders
+                .setContentType(
+                        MediaType
+                                .parseMediaType(
+                                        contentType
+                                )
+                );
+
+        partHeaders
+                .setContentDispositionFormData(
+                        "file",
+                        filename
+                );
+
+        HttpEntity<ByteArrayResource>
+                filePart =
+                new HttpEntity<>(
+                        audioResource,
+                        partHeaders
+                );
+
         MultiValueMap<String, Object> body =
                 new LinkedMultiValueMap<>();
 
         body.add(
                 "file",
-                audioResource
+                filePart
         );
 
         try {
@@ -63,9 +94,12 @@ public class AnswerAiClient {
                                     "/ai/answers/transcribe"
                             )
                             .contentType(
-                                    MediaType.MULTIPART_FORM_DATA
+                                    MediaType
+                                            .MULTIPART_FORM_DATA
                             )
-                            .body(body)
+                            .body(
+                                    body
+                            )
                             .retrieve()
                             .body(
                                     AnswerTranscribeResponse.class
@@ -88,7 +122,8 @@ public class AnswerAiClient {
 
     private void validateAudio(
             byte[] audioBytes,
-            String filename
+            String filename,
+            String contentType
     ) {
         if (audioBytes == null
                 || audioBytes.length == 0) {
@@ -105,6 +140,14 @@ public class AnswerAiClient {
                     "Audio filename must not be empty."
             );
         }
+
+        if (contentType == null
+                || contentType.isBlank()) {
+
+            throw new IllegalArgumentException(
+                    "Audio content type must not be empty."
+            );
+        }
     }
 
     private void validateResponse(
@@ -118,15 +161,20 @@ public class AnswerAiClient {
         }
 
         if (response.transcript() == null
-                || response.transcript().isBlank()) {
+                || response
+                .transcript()
+                .isBlank()) {
 
             throw new IllegalStateException(
                     "AI transcript must not be empty."
             );
         }
 
-        if (response.normalizedContent() == null
-                || response.normalizedContent().isBlank()) {
+        if (response.normalizedContent()
+                == null
+                || response
+                .normalizedContent()
+                .isBlank()) {
 
             throw new IllegalStateException(
                     "AI normalized answer content must not be empty."

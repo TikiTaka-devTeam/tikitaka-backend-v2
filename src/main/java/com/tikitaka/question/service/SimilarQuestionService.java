@@ -4,13 +4,14 @@ import java.util.List;
 import java.util.UUID;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.tikitaka.question.ai.QuestionAiClient;
 import com.tikitaka.question.ai.dto.QuestionAnalyzeRequest;
 import com.tikitaka.question.ai.dto.QuestionAnalyzeResponse;
 import com.tikitaka.question.entity.Question;
-import com.tikitaka.question.entity.QuestionCategory;
 import com.tikitaka.question.repository.QuestionCategoryRepository;
 import com.tikitaka.question.repository.QuestionRepository;
 import com.tikitaka.question.repository.projection.QuestionSimilarityProjection;
@@ -19,7 +20,6 @@ import lombok.RequiredArgsConstructor;
 
 @Service
 @RequiredArgsConstructor
-@Transactional(readOnly = true)
 public class SimilarQuestionService {
 
     private static final int EMBEDDING_DIMENSION = 768;
@@ -27,26 +27,19 @@ public class SimilarQuestionService {
     private final QuestionAiClient questionAiClient;
     private final QuestionRepository questionRepository;
     private final QuestionCategoryRepository questionCategoryRepository;
+    private final TransactionTemplate transactionTemplate;
 
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public List<Result> findSimilarQuestions(
             UUID documentId,
             String title,
             String content
     ) {
-        List<QuestionCategory> categories =
-                questionCategoryRepository
-                        .findAllByDocumentIdAndDeletedFalse(
-                                documentId
-                        );
-
-        QuestionAnalyzeRequest request =
-                new QuestionAnalyzeRequest(
-                        UUID.randomUUID(),
-                        title,
-                        content,
-                        null,
-                        null,
-                        categories.stream()
+        List<QuestionAnalyzeRequest.CategoryCandidate> categoryCandidates =
+                transactionTemplate.execute(status ->
+                        questionCategoryRepository
+                                .findAllByDocumentIdAndDeletedFalse(documentId)
+                                .stream()
                                 .map(category ->
                                         new QuestionAnalyzeRequest.CategoryCandidate(
                                                 category.getId(),
@@ -56,10 +49,22 @@ public class SimilarQuestionService {
                                 .toList()
                 );
 
-        QuestionAnalyzeResponse response =
-                questionAiClient.analyzeQuestion(
-                        request
+        if (categoryCandidates == null) {
+            categoryCandidates = List.of();
+        }
+
+        QuestionAnalyzeRequest request =
+                new QuestionAnalyzeRequest(
+                        UUID.randomUUID(),
+                        title,
+                        content,
+                        null,
+                        null,
+                        categoryCandidates
                 );
+
+        QuestionAnalyzeResponse response =
+                questionAiClient.analyzeQuestion(request);
 
         if (response.isOther()) {
             return List.of();
@@ -74,15 +79,21 @@ public class SimilarQuestionService {
                         response.embedding()
                 );
 
-        List<QuestionSimilarityProjection> similarities =
-                questionRepository.findSimilarQuestions(
-                        documentId,
-                        pgVector
+        List<Result> results =
+                transactionTemplate.execute(status ->
+                        questionRepository
+                                .findSimilarQuestions(
+                                        documentId,
+                                        pgVector
+                                )
+                                .stream()
+                                .map(this::toResult)
+                                .toList()
                 );
 
-        return similarities.stream()
-                .map(this::toResult)
-                .toList();
+        return results == null
+                ? List.of()
+                : results;
     }
 
     private Result toResult(
@@ -100,9 +111,14 @@ public class SimilarQuestionService {
                                 )
                         );
 
+        Double similarity =
+                projection.getSimilarity();
+
         return new Result(
                 question,
-                projection.getSimilarity()
+                similarity == null
+                        ? 0.0
+                        : similarity
         );
     }
 
@@ -110,7 +126,8 @@ public class SimilarQuestionService {
             float[] embedding
     ) {
         if (embedding == null
-                || embedding.length != EMBEDDING_DIMENSION) {
+                || embedding.length
+                != EMBEDDING_DIMENSION) {
 
             throw new IllegalStateException(
                     "Similar question embedding dimension must be "
@@ -124,7 +141,9 @@ public class SimilarQuestionService {
             float[] embedding
     ) {
         StringBuilder builder =
-                new StringBuilder("[");
+                new StringBuilder(
+                        "["
+                );
 
         for (int index = 0;
              index < embedding.length;

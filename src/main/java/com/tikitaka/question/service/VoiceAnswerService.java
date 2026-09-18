@@ -5,7 +5,6 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 
-import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -41,7 +40,8 @@ public class VoiceAnswerService {
     private static final long MAX_AUDIO_SIZE =
             20L * 1024L * 1024L;
 
-    private static final Set<String> ALLOWED_EXTENSIONS =
+    private static final Set<String>
+            ALLOWED_EXTENSIONS =
             Set.of(
                     "mp3",
                     "wav",
@@ -49,7 +49,8 @@ public class VoiceAnswerService {
                     "webm"
             );
 
-    private static final Set<String> ALLOWED_CONTENT_TYPES =
+    private static final Set<String>
+            ALLOWED_CONTENT_TYPES =
             Set.of(
                     "audio/mpeg",
                     "audio/mp3",
@@ -61,19 +62,30 @@ public class VoiceAnswerService {
                     "video/webm"
             );
 
-    private final QuestionRepository questionRepository;
-    private final AnswerRepository answerRepository;
+    private final QuestionRepository
+            questionRepository;
 
-    private final SpaceMemberRepository spaceMemberRepository;
-    private final SpaceMemberPermissionRepository permissionRepository;
+    private final AnswerRepository
+            answerRepository;
 
-    private final AnswerAiClient answerAiClient;
+    private final SpaceMemberRepository
+            spaceMemberRepository;
 
-    private final DocumentStorage storage;
+    private final SpaceMemberPermissionRepository
+            permissionRepository;
 
-    private final TransactionTemplate transactionTemplate;
+    private final AnswerAiClient
+            answerAiClient;
 
-    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    private final DocumentStorage
+            storage;
+
+    private final TransactionTemplate
+            transactionTemplate;
+
+    @Transactional(
+            propagation = Propagation.NOT_SUPPORTED
+    )
     public VoiceAnswerResponse createVoiceAnswer(
             UUID questionId,
             MultipartFile file,
@@ -85,7 +97,7 @@ public class VoiceAnswerService {
 
         validateAccess(
                 questionId,
-                user
+                user.getId()
         );
 
         byte[] audioBytes =
@@ -109,8 +121,8 @@ public class VoiceAnswerService {
                         filename
                 );
 
-        boolean uploaded =
-                false;
+        boolean uploaded = false;
+        boolean saved = false;
 
         try {
             storage.put(
@@ -121,44 +133,56 @@ public class VoiceAnswerService {
 
             uploaded = true;
 
-            AnswerTranscribeResponse aiResponse =
-                    answerAiClient.transcribe(
-                            audioBytes,
-                            filename,
-                            contentType
-                    );
+            AnswerTranscribeResponse
+                    aiResponse =
+                    answerAiClient
+                            .transcribe(
+                                    audioBytes,
+                                    filename,
+                                    contentType
+                            );
 
-            VoiceAnswerSnapshot saved =
-                    transactionTemplate.execute(status ->
-                            saveVoiceAnswer(
-                                    questionId,
-                                    user.getId(),
-                                    aiResponse,
+            String audioUrl =
+                    storage
+                            .presignedGetUrl(
                                     audioKey
-                            )
-                    );
+                            );
 
-            if (saved == null) {
+            VoiceAnswerSnapshot snapshot =
+                    transactionTemplate
+                            .execute(
+                                    status ->
+                                            saveVoiceAnswer(
+                                                    questionId,
+                                                    user.getId(),
+                                                    aiResponse,
+                                                    audioKey
+                                            )
+                            );
+
+            if (snapshot == null) {
+
                 throw new IllegalStateException(
                         "Voice answer transaction returned null."
                 );
             }
 
+            saved = true;
+
             return new VoiceAnswerResponse(
-                    saved.answerId(),
-                    saved.questionId(),
+                    snapshot.answerId(),
+                    snapshot.questionId(),
                     AnswerType.VOICE,
-                    saved.content(),
-                    saved.transcript(),
-                    storage.presignedGetUrl(
-                            audioKey
-                    ),
-                    saved.createdAt()
+                    snapshot.content(),
+                    snapshot.transcript(),
+                    audioUrl,
+                    snapshot.createdAt()
             );
 
         } catch (RuntimeException exception) {
 
-            if (uploaded) {
+            if (uploaded && !saved) {
+
                 cleanupAudio(
                         audioKey,
                         exception
@@ -171,25 +195,30 @@ public class VoiceAnswerService {
 
     private void validateAccess(
             UUID questionId,
-            User user
+            UUID userId
     ) {
-        transactionTemplate.executeWithoutResult(status -> {
+        transactionTemplate
+                .executeWithoutResult(
+                        status -> {
 
-            Question question =
-                    getQuestion(
-                            questionId
-                    );
+                            Question question =
+                                    getQuestion(
+                                            questionId
+                                    );
 
-            requireManager(
-                    question.getDocument()
-                            .getSpace()
-                            .getId(),
-                    user
-            );
-        });
+                            requireManager(
+                                    question
+                                            .getDocument()
+                                            .getSpace()
+                                            .getId(),
+                                    userId
+                            );
+                        }
+                );
     }
 
-    private VoiceAnswerSnapshot saveVoiceAnswer(
+    private VoiceAnswerSnapshot
+    saveVoiceAnswer(
             UUID questionId,
             UUID userId,
             AnswerTranscribeResponse aiResponse,
@@ -201,36 +230,29 @@ public class VoiceAnswerService {
                 );
 
         SpaceMember member =
-                spaceMemberRepository
-                        .findBySpaceIdAndUserIdAndStatusAndRemovedAtIsNull(
-                                question.getDocument()
-                                        .getSpace()
-                                        .getId(),
-                                userId,
-                                SpaceMemberStatus.APPROVED
-                        )
-                        .orElseThrow(() ->
-                                new BusinessException(
-                                        QuestionErrorCode
-                                                .SPACE_MEMBER_REQUIRED
-                                )
-                        );
-
-        User author =
-                member.getUser();
+                requireManager(
+                        question
+                                .getDocument()
+                                .getSpace()
+                                .getId(),
+                        userId
+                );
 
         Answer answer =
-                answerRepository.save(
-                        Answer.createVoice(
-                                question,
-                                author,
-                                aiResponse.normalizedContent()
-                                        .trim(),
-                                audioKey,
-                                aiResponse.transcript()
-                                        .trim()
-                        )
-                );
+                answerRepository
+                        .save(
+                                Answer.createVoice(
+                                        question,
+                                        member.getUser(),
+                                        aiResponse
+                                                .normalizedContent()
+                                                .trim(),
+                                        audioKey,
+                                        aiResponse
+                                                .transcript()
+                                                .trim()
+                                )
+                        );
 
         question.markAnswered();
 
@@ -250,33 +272,38 @@ public class VoiceAnswerService {
                 .findById(
                         questionId
                 )
-                .filter(question ->
-                        !question.isDeleted()
+                .filter(
+                        question ->
+                                !question
+                                        .isDeleted()
                 )
-                .orElseThrow(() ->
-                        new BusinessException(
-                                QuestionErrorCode
-                                        .QUESTION_NOT_FOUND
-                        )
+                .orElseThrow(
+                        () ->
+                                new BusinessException(
+                                        QuestionErrorCode
+                                                .QUESTION_NOT_FOUND
+                                )
                 );
     }
 
     private SpaceMember requireManager(
             UUID spaceId,
-            User user
+            UUID userId
     ) {
         SpaceMember member =
                 spaceMemberRepository
                         .findBySpaceIdAndUserIdAndStatusAndRemovedAtIsNull(
                                 spaceId,
-                                user.getId(),
-                                SpaceMemberStatus.APPROVED
+                                userId,
+                                SpaceMemberStatus
+                                        .APPROVED
                         )
-                        .orElseThrow(() ->
-                                new BusinessException(
-                                        QuestionErrorCode
-                                                .SPACE_MEMBER_REQUIRED
-                                )
+                        .orElseThrow(
+                                () ->
+                                        new BusinessException(
+                                                QuestionErrorCode
+                                                        .SPACE_MEMBER_REQUIRED
+                                        )
                         );
 
         if (member.getRole()
@@ -290,7 +317,8 @@ public class VoiceAnswerService {
                 && permissionRepository
                 .existsBySpaceMemberIdAndPermission(
                         member.getId(),
-                        PermissionType.QUESTION_MANAGE
+                        PermissionType
+                                .QUESTION_MANAGE
                 )) {
 
             return member;
@@ -331,9 +359,10 @@ public class VoiceAnswerService {
                         filename
                 );
 
-        if (!ALLOWED_EXTENSIONS.contains(
-                extension
-        )) {
+        if (!ALLOWED_EXTENSIONS
+                .contains(
+                        extension
+                )) {
 
             throw new IllegalArgumentException(
                     "Unsupported audio file extension: "
@@ -346,9 +375,10 @@ public class VoiceAnswerService {
                         file.getContentType()
                 );
 
-        if (!ALLOWED_CONTENT_TYPES.contains(
-                contentType
-        )) {
+        if (!ALLOWED_CONTENT_TYPES
+                .contains(
+                        contentType
+                )) {
 
             throw new IllegalArgumentException(
                     "Unsupported audio content type: "
@@ -402,19 +432,28 @@ public class VoiceAnswerService {
 
         String normalized =
                 filename
-                        .replace("\\", "/");
+                        .replace(
+                                "\\",
+                                "/"
+                        );
 
         int slash =
-                normalized.lastIndexOf('/');
+                normalized
+                        .lastIndexOf(
+                                '/'
+                        );
 
         if (slash >= 0) {
+
             normalized =
-                    normalized.substring(
-                            slash + 1
-                    );
+                    normalized
+                            .substring(
+                                    slash + 1
+                            );
         }
 
         if (normalized.isBlank()) {
+
             throw new IllegalArgumentException(
                     "Audio filename must not be empty."
             );
@@ -445,10 +484,14 @@ public class VoiceAnswerService {
             String filename
     ) {
         int dot =
-                filename.lastIndexOf('.');
+                filename
+                        .lastIndexOf(
+                                '.'
+                        );
 
         if (dot < 0
-                || dot == filename.length() - 1) {
+                || dot
+                == filename.length() - 1) {
 
             throw new IllegalArgumentException(
                     "Audio file extension is required."
@@ -473,11 +516,13 @@ public class VoiceAnswerService {
                     audioKey
             );
 
-        } catch (RuntimeException cleanupFailure) {
+        } catch (RuntimeException
+                 cleanupFailure) {
 
-            original.addSuppressed(
-                    cleanupFailure
-            );
+            original
+                    .addSuppressed(
+                            cleanupFailure
+                    );
         }
     }
 
