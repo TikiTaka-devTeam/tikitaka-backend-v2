@@ -9,6 +9,8 @@ import com.tikitaka.user.entity.User;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -41,6 +43,13 @@ public class QuestionCategory extends BaseTimeEntity {
     @JoinColumn(name = "created_by")
     private User createdBy;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "source_type", nullable = false, length = 20)
+    private CategorySourceType sourceType = CategorySourceType.MANUAL;
+
+    @Column(name = "source_pages", columnDefinition = "jsonb")
+    private String sourcePages;
+
     @Column(name = "is_deleted", nullable = false)
     private boolean deleted = false;
 
@@ -50,11 +59,15 @@ public class QuestionCategory extends BaseTimeEntity {
     private QuestionCategory(
             Document document,
             String name,
-            User createdBy
+            User createdBy,
+            CategorySourceType sourceType,
+            String sourcePages
     ) {
         this.document = document;
         this.name = name;
         this.createdBy = createdBy;
+        this.sourceType = sourceType;
+        this.sourcePages = sourcePages;
     }
 
     public static QuestionCategory createManual(
@@ -62,14 +75,27 @@ public class QuestionCategory extends BaseTimeEntity {
             String name,
             User createdBy
     ) {
-        return new QuestionCategory(document, name, createdBy);
+        return new QuestionCategory(
+                document,
+                name,
+                createdBy,
+                CategorySourceType.MANUAL,
+                null
+        );
     }
 
     public static QuestionCategory createByAi(
             Document document,
-            String name
+            String name,
+            String sourcePages
     ) {
-        return new QuestionCategory(document, name, null);
+        return new QuestionCategory(
+                document,
+                name,
+                null,
+                CategorySourceType.AI,
+                sourcePages
+        );
     }
 
     public void updateName(String name) {
