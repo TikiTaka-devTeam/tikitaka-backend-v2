@@ -4,6 +4,7 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestClientResponseException;
 
 import com.tikitaka.document.ai.dto.DocumentAnalyzeRequest;
 import com.tikitaka.document.ai.dto.DocumentAnalyzeResponse;
@@ -44,6 +45,16 @@ public class DocumentAiClient {
             }
 
             return response;
+
+        } catch (RestClientResponseException exception) {
+            throw new IllegalStateException(
+                    "Failed to call AI document analysis API. "
+                            + "status="
+                            + exception.getStatusCode()
+                            + ", response="
+                            + exception.getResponseBodyAsString(),
+                    exception
+            );
 
         } catch (RestClientException exception) {
             throw new IllegalStateException(

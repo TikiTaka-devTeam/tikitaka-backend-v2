@@ -7,6 +7,8 @@ import java.util.Map;
 import java.util.UUID;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import com.tikitaka.document.ai.DocumentAiClient;
@@ -34,7 +36,7 @@ public class DocumentAiProcessingService {
             questionCategoryRepository;
     private final QuestionCategoryMappingRepository
             questionCategoryMappingRepository;
-    private final TransactionTemplate transactionTemplate;
+    private final PlatformTransactionManager transactionManager;
 
     public void process(
             UUID documentId,
@@ -71,7 +73,7 @@ public class DocumentAiProcessingService {
                     response
             );
 
-            transactionTemplate.executeWithoutResult(
+            requiresNewTransaction().executeWithoutResult(
                     status ->
                             reconcileCategoriesAndComplete(
                                     documentId,
@@ -93,7 +95,7 @@ public class DocumentAiProcessingService {
             UUID documentId
     ) {
         DocumentSnapshot snapshot =
-                transactionTemplate.execute(
+                requiresNewTransaction().execute(
                         status -> {
 
                             Document document =
@@ -249,7 +251,7 @@ public class DocumentAiProcessingService {
     private void markFailed(
             UUID documentId
     ) {
-        transactionTemplate.executeWithoutResult(
+        requiresNewTransaction().executeWithoutResult(
                 status ->
                         documentRepository
                                 .findById(
@@ -276,6 +278,20 @@ public class DocumentAiProcessingService {
                                                 + documentId
                                 )
                 );
+    }
+
+    private TransactionTemplate requiresNewTransaction() {
+        TransactionTemplate transactionTemplate =
+                new TransactionTemplate(
+                        transactionManager
+                );
+
+        transactionTemplate.setPropagationBehavior(
+                TransactionDefinition
+                        .PROPAGATION_REQUIRES_NEW
+        );
+
+        return transactionTemplate;
     }
 
     private String normalizeName(
