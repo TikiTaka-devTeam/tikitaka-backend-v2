@@ -1,6 +1,6 @@
 package com.tikitaka.question.ai;
 
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -19,18 +19,10 @@ public class AnswerAiClient {
     private final RestClient restClient;
 
     public AnswerAiClient(
-            RestClient.Builder builder,
-            @Value(
-                    "${ai.base-url:http://localhost:8000}"
-            )
-            String aiBaseUrl
+            @Qualifier("aiRestClient")
+            RestClient restClient
     ) {
-        this.restClient =
-                builder
-                        .baseUrl(
-                                aiBaseUrl
-                        )
-                        .build();
+        this.restClient = restClient;
     }
 
     public AnswerTranscribeResponse transcribe(

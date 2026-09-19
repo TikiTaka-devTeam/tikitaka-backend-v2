@@ -1,6 +1,6 @@
 package com.tikitaka.question.ai;
 
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
@@ -14,23 +14,22 @@ public class ClusterAiClient {
     private final RestClient restClient;
 
     public ClusterAiClient(
-            RestClient.Builder builder,
-            @Value("${ai.base-url:http://localhost:8000}") String aiBaseUrl
+            @Qualifier("aiRestClient")
+            RestClient restClient
     ) {
-        this.restClient = builder
-                .baseUrl(aiBaseUrl)
-                .build();
+        this.restClient = restClient;
     }
 
     public ClusterTitleResponse generateTitle(
             ClusterTitleRequest request
     ) {
         try {
-            ClusterTitleResponse response = restClient.post()
-                    .uri("/ai/clusters/title")
-                    .body(request)
-                    .retrieve()
-                    .body(ClusterTitleResponse.class);
+            ClusterTitleResponse response =
+                    restClient.post()
+                            .uri("/ai/clusters/title")
+                            .body(request)
+                            .retrieve()
+                            .body(ClusterTitleResponse.class);
 
             if (response == null) {
                 throw new IllegalStateException(
