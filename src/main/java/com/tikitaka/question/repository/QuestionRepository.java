@@ -54,6 +54,10 @@ public interface QuestionRepository
             UUID studentId
     );
 
+    boolean existsByPrimaryCategoryIdAndDeletedFalse(
+        UUID primaryCategoryId
+    );
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     Optional<Question> findQuestionById(
             UUID id

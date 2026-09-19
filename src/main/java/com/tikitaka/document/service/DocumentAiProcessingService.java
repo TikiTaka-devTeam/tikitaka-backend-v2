@@ -1,6 +1,9 @@
 package com.tikitaka.document.service;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.UUID;
 
 import org.springframework.stereotype.Service;
@@ -12,8 +15,12 @@ import com.tikitaka.document.ai.dto.DocumentAnalyzeResponse;
 import com.tikitaka.document.ai.dto.DocumentCategoryResult;
 import com.tikitaka.document.entity.Document;
 import com.tikitaka.document.repository.DocumentRepository;
+import com.tikitaka.question.entity.CategorySourceType;
 import com.tikitaka.question.entity.QuestionCategory;
+import com.tikitaka.question.repository.QuestionCategoryMappingRepository;
 import com.tikitaka.question.repository.QuestionCategoryRepository;
+import com.tikitaka.question.repository.QuestionClusterRepository;
+import com.tikitaka.question.repository.QuestionRepository;
 
 import lombok.RequiredArgsConstructor;
 
@@ -25,7 +32,13 @@ public class DocumentAiProcessingService {
     private final DocumentAiClient documentAiClient;
 
     private final DocumentRepository documentRepository;
-    private final QuestionCategoryRepository questionCategoryRepository;
+    private final QuestionCategoryRepository
+            questionCategoryRepository;
+    private final QuestionCategoryMappingRepository
+            questionCategoryMappingRepository;
+    private final QuestionRepository questionRepository;
+    private final QuestionClusterRepository
+            questionClusterRepository;
 
     private final TransactionTemplate transactionTemplate;
 
@@ -33,90 +46,293 @@ public class DocumentAiProcessingService {
             UUID documentId,
             byte[] pdfBytes
     ) {
-        Document document =
-                documentRepository.findById(documentId)
-                        .orElseThrow(() ->
-                                new IllegalArgumentException(
-                                        "Document not found: " + documentId
-                                )
-                        );
-
-        List<DocumentAnalyzeRequest.PageContent> pages =
-                pdfTextExtractService.extractPages(
-                        pdfBytes
+        DocumentSnapshot document =
+                markProcessingAndLoadDocument(
+                        documentId
                 );
 
-        validatePages(pages);
+        try {
+            List<DocumentAnalyzeRequest.PageContent> pages =
+                    pdfTextExtractService.extractPages(
+                            pdfBytes
+                    );
 
-        DocumentAnalyzeRequest request =
-                new DocumentAnalyzeRequest(
-                        document.getId(),
-                        document.getTitle(),
-                        pages
-                );
+            validatePages(
+                    pages
+            );
 
-        DocumentAnalyzeResponse response =
-                documentAiClient.analyzeDocument(
-                        request
-                );
+            DocumentAnalyzeRequest request =
+                    new DocumentAnalyzeRequest(
+                            document.id(),
+                            document.title(),
+                            pages
+                    );
 
-        validateResponse(response);
+            DocumentAnalyzeResponse response =
+                    documentAiClient.analyzeDocument(
+                            request
+                    );
 
-        transactionTemplate.executeWithoutResult(status ->
-                saveCategories(
-                        documentId,
-                        response.categories()
-                )
-        );
+            validateResponse(
+                    response
+            );
+
+            transactionTemplate.executeWithoutResult(
+                    status ->
+                            reconcileCategoriesAndComplete(
+                                    documentId,
+                                    response.categories()
+                            )
+            );
+
+        } catch (RuntimeException exception) {
+            markFailed(
+                    documentId
+            );
+
+            throw exception;
+        }
     }
 
-    private void saveCategories(
+    private DocumentSnapshot
+    markProcessingAndLoadDocument(
+            UUID documentId
+    ) {
+        DocumentSnapshot snapshot =
+                transactionTemplate.execute(
+                        status -> {
+
+                            Document document =
+                                    getDocument(
+                                            documentId
+                                    );
+
+                            document.startCategoryProcessing();
+
+                            return new DocumentSnapshot(
+                                    document.getId(),
+                                    document.getTitle()
+                            );
+                        }
+                );
+
+        if (snapshot == null) {
+            throw new IllegalStateException(
+                    "Document AI processing transaction returned null."
+            );
+        }
+
+        return snapshot;
+    }
+
+    private void reconcileCategoriesAndComplete(
             UUID documentId,
             List<DocumentCategoryResult> results
     ) {
         Document document =
-                documentRepository.findById(documentId)
-                        .orElseThrow(() ->
-                                new IllegalArgumentException(
-                                        "Document not found: " + documentId
-                                )
-                        );
+                getDocument(
+                        documentId
+                );
+
+        Map<String, DocumentCategoryResult>
+                incomingByName =
+                new LinkedHashMap<>();
 
         for (DocumentCategoryResult result : results) {
 
-            String name =
-                    result.name().trim();
+            String normalizedName =
+                    normalizeName(
+                            result.name()
+                    );
 
-            boolean alreadyExists =
-                    questionCategoryRepository
-                            .existsByDocumentIdAndNameAndDeletedFalse(
-                                    documentId,
-                                    name
-                            );
+            incomingByName.putIfAbsent(
+                    normalizedKey(
+                            normalizedName
+                    ),
+                    new DocumentCategoryResult(
+                            normalizedName,
+                            result.sourcePages()
+                    )
+            );
+        }
 
-            if (alreadyExists) {
+        List<QuestionCategory>
+                existingCategories =
+                questionCategoryRepository
+                        .findAllByDocumentIdAndDeletedFalse(
+                                documentId
+                        );
+
+        Map<String, QuestionCategory>
+                existingByName =
+                new LinkedHashMap<>();
+
+        for (QuestionCategory category
+                : existingCategories) {
+
+            existingByName.put(
+                    normalizedKey(
+                            category.getName()
+                    ),
+                    category
+            );
+        }
+
+        for (
+                Map.Entry<
+                        String,
+                        DocumentCategoryResult
+                        > entry
+                : incomingByName.entrySet()
+        ) {
+
+            QuestionCategory existing =
+                    existingByName.get(
+                            entry.getKey()
+                    );
+
+            if (existing != null) {
+
+                if (
+                        existing.getSourceType()
+                                == CategorySourceType.AI
+                ) {
+                    existing.updateAiSourcePages(
+                            entry
+                                    .getValue()
+                                    .sourcePages()
+                    );
+                }
+
                 continue;
             }
 
             QuestionCategory category =
                     QuestionCategory.createByAi(
                             document,
-                            name,
-                            result.sourcePages()
+                            entry.getValue()
+                                    .name(),
+                            entry.getValue()
+                                    .sourcePages()
                     );
 
             questionCategoryRepository.save(
                     category
             );
         }
+
+        for (
+                QuestionCategory existing
+                : existingCategories
+        ) {
+
+            if (
+                    existing.getSourceType()
+                            != CategorySourceType.AI
+            ) {
+                continue;
+            }
+
+            if (
+                    incomingByName.containsKey(
+                            normalizedKey(
+                                    existing.getName()
+                            )
+                    )
+            ) {
+                continue;
+            }
+
+            if (
+                    isCategoryInUse(
+                            existing.getId()
+                    )
+            ) {
+                continue;
+            }
+
+            existing.delete();
+        }
+
+        document.completeCategoryProcessing();
+    }
+
+    private boolean isCategoryInUse(
+            UUID categoryId
+    ) {
+        return questionCategoryMappingRepository
+                .existsByCategoryId(
+                        categoryId
+                )
+                || questionRepository
+                .existsByPrimaryCategoryIdAndDeletedFalse(
+                        categoryId
+                )
+                || questionClusterRepository
+                .existsByCategoryId(
+                        categoryId
+                );
+    }
+
+    private void markFailed(
+            UUID documentId
+    ) {
+        transactionTemplate.executeWithoutResult(
+                status ->
+                        documentRepository
+                                .findById(
+                                        documentId
+                                )
+                                .ifPresent(
+                                        Document::
+                                                failCategoryProcessing
+                                )
+        );
+    }
+
+    private Document getDocument(
+            UUID documentId
+    ) {
+        return documentRepository
+                .findById(
+                        documentId
+                )
+                .orElseThrow(
+                        () ->
+                                new IllegalArgumentException(
+                                        "Document not found: "
+                                                + documentId
+                                )
+                );
+    }
+
+    private String normalizeName(
+            String name
+    ) {
+        return name == null
+                ? ""
+                : name.trim();
+    }
+
+    private String normalizedKey(
+            String name
+    ) {
+        return normalizeName(
+                name
+        )
+                .toLowerCase(
+                        Locale.ROOT
+                );
     }
 
     private void validatePages(
-            List<DocumentAnalyzeRequest.PageContent> pages
+            List<DocumentAnalyzeRequest.PageContent>
+                    pages
     ) {
-        if (pages == null
-                || pages.isEmpty()) {
-
+        if (
+                pages == null
+                        || pages.isEmpty()
+        ) {
             throw new IllegalStateException(
                     "PDF pages must not be empty."
             );
@@ -124,9 +340,13 @@ public class DocumentAiProcessingService {
 
         boolean hasText =
                 pages.stream()
-                        .anyMatch(page ->
-                                page.text() != null
-                                        && !page.text().isBlank()
+                        .anyMatch(
+                                page ->
+                                        page.text()
+                                                != null
+                                                && !page
+                                                .text()
+                                                .isBlank()
                         );
 
         if (!hasText) {
@@ -151,10 +371,13 @@ public class DocumentAiProcessingService {
             );
         }
 
-        for (DocumentCategoryResult category :
-                response.categories()) {
-
-            validateCategory(category);
+        for (
+                DocumentCategoryResult category
+                : response.categories()
+        ) {
+            validateCategory(
+                    category
+            );
         }
     }
 
@@ -167,28 +390,36 @@ public class DocumentAiProcessingService {
             );
         }
 
-        if (category.name() == null
-                || category.name().isBlank()) {
-
+        if (
+                category.name() == null
+                        || category.name()
+                        .isBlank()
+        ) {
             throw new IllegalStateException(
                     "AI category name must not be empty."
             );
         }
 
-        if (category.sourcePages() == null
-                || category.sourcePages().isEmpty()) {
-
+        if (
+                category.sourcePages()
+                        == null
+                        || category
+                        .sourcePages()
+                        .isEmpty()
+        ) {
             throw new IllegalStateException(
                     "AI category source pages must not be empty."
             );
         }
 
         boolean invalidPage =
-                category.sourcePages()
+                category
+                        .sourcePages()
                         .stream()
-                        .anyMatch(page ->
-                                page == null
-                                        || page <= 0
+                        .anyMatch(
+                                page ->
+                                        page == null
+                                                || page <= 0
                         );
 
         if (invalidPage) {
@@ -196,5 +427,11 @@ public class DocumentAiProcessingService {
                     "AI category source page must be positive."
             );
         }
+    }
+
+    private record DocumentSnapshot(
+            UUID id,
+            String title
+    ) {
     }
 }

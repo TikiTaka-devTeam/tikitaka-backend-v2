@@ -18,6 +18,10 @@ public interface QuestionClusterRepository
             UUID documentId
     );
 
+    boolean existsByCategoryId(
+        UUID categoryId
+    );
+
     @Query(
             value = """
                     SELECT

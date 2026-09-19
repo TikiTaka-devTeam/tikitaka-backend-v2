@@ -48,11 +48,19 @@ public class QuestionCategory extends BaseTimeEntity {
     private User createdBy;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "source_type", nullable = false, length = 20)
-    private CategorySourceType sourceType = CategorySourceType.MANUAL;
+    @Column(
+            name = "source_type",
+            nullable = false,
+            length = 20
+    )
+    private CategorySourceType sourceType =
+            CategorySourceType.MANUAL;
 
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "source_pages", columnDefinition = "jsonb")
+    @Column(
+            name = "source_pages",
+            columnDefinition = "jsonb"
+    )
     private List<Integer> sourcePages;
 
     @Column(name = "is_deleted", nullable = false)
@@ -72,7 +80,11 @@ public class QuestionCategory extends BaseTimeEntity {
         this.name = name;
         this.createdBy = createdBy;
         this.sourceType = sourceType;
-        this.sourcePages = sourcePages;
+
+        this.sourcePages =
+                sourcePages == null
+                        ? null
+                        : List.copyOf(sourcePages);
     }
 
     public static QuestionCategory createManual(
@@ -103,8 +115,23 @@ public class QuestionCategory extends BaseTimeEntity {
         );
     }
 
-    public void updateName(String name) {
+    public void updateName(
+            String name
+    ) {
         this.name = name;
+    }
+
+    public void updateAiSourcePages(
+            List<Integer> sourcePages
+    ) {
+        if (sourceType != CategorySourceType.AI) {
+            return;
+        }
+
+        this.sourcePages =
+                sourcePages == null
+                        ? null
+                        : List.copyOf(sourcePages);
     }
 
     public void delete() {
