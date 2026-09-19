@@ -28,8 +28,8 @@ public final class QuestionResponse { private QuestionResponse() {}
  public record SpaceCreate(@JsonProperty("question_id") UUID questionId, DocumentInfo document, SlideInfo slide, String title, String content,
    List<CategoryInfo> categories, QuestionStatus status, @JsonProperty("created_at") Instant createdAt) {}
  public record SimilarItem(@JsonProperty("question_id") UUID questionId, String title, String content, List<CategoryInfo> categories,
-   QuestionStatus status, @JsonProperty("like_count") Integer likeCount) {}
- public record SimilarResponse(@JsonProperty("similar_questions") List<SimilarItem> similarQuestions) {}
+   QuestionStatus status, @JsonProperty("like_count") Integer likeCount, double similarity) {}
+ public record SimilarResponse(@JsonProperty("question_id") UUID questionId, @JsonProperty("similar_questions") List<SimilarItem> similarQuestions) {}
  public record Delete(@JsonProperty("question_id") UUID questionId, @JsonProperty("is_deleted") boolean deleted, @JsonProperty("deleted_at") Instant deletedAt) {}
  public record AnswerMutation(@JsonProperty("answer_id") UUID answerId, @JsonProperty("question_id") UUID questionId, String content,
    @JsonProperty("created_at") Instant createdAt, @JsonProperty("updated_at") Instant updatedAt, @JsonProperty("is_deleted") Boolean deleted) {}
@@ -43,5 +43,9 @@ public final class QuestionResponse { private QuestionResponse() {}
  public record CategoryResult(@JsonProperty("operation_id") String operationId, String type, @JsonProperty("document_id") UUID documentId,
    @JsonProperty("temp_id") String tempId, @JsonProperty("category_id") UUID categoryId, String name, String status) {}
  public record CategoryBatchResponse(List<CategoryResult> results, @JsonProperty("saved_at") Instant savedAt) {}
+ public record CategoryMutation(@JsonProperty("category_id") UUID categoryId, @JsonProperty("document_id") UUID documentId, String name, String source) {}
+ public record CategorizedQuestion(@JsonProperty("question_id") UUID questionId, String title, String content, QuestionStatus status, @JsonProperty("like_count") Integer likeCount) {}
+ public record CategoryGroup(@JsonProperty("category_id") UUID categoryId, String name, List<CategorizedQuestion> questions) {}
+ public record CategorizedQuestionsResponse(@JsonProperty("document_id") UUID documentId, List<CategoryGroup> categories) {}
  public record ExportResponse(@JsonProperty("download_url") String downloadUrl) {}
 }

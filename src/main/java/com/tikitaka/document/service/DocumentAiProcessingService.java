@@ -237,27 +237,13 @@ public class DocumentAiProcessingService {
                 continue;
             }
 
-            if (
-                    isCategoryInUse(
-                            existing.getId()
-                    )
-            ) {
-                continue;
-            }
-
+            questionCategoryMappingRepository.deleteAllByCategoryId(
+                    existing.getId()
+            );
             existing.delete();
         }
 
         document.completeCategoryProcessing();
-    }
-
-    private boolean isCategoryInUse(
-            UUID categoryId
-    ) {
-        return questionCategoryMappingRepository
-                .existsByCategoryId(
-                        categoryId
-                );
     }
 
     private void markFailed(

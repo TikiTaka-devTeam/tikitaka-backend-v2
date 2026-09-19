@@ -21,7 +21,8 @@ import com.tikitaka.document.repository.DocumentRepository;
 import com.tikitaka.document.repository.SlideRepository;
 import com.tikitaka.global.common.cursor.CursorCodec;
 import com.tikitaka.global.exception.BusinessException;
-import com.tikitaka.question.dto.request.CategoryBatchRequest;
+import com.tikitaka.question.dto.request.CategoryCreateRequest;
+import com.tikitaka.question.dto.request.CategoryUpdateRequest;
 import com.tikitaka.question.dto.request.CommentCreateRequest;
 import com.tikitaka.question.dto.request.QuestionCreateRequest;
 import com.tikitaka.question.dto.request.SpaceQuestionCreateRequest;
@@ -72,6 +73,7 @@ public class QuestionService {
 
     private final QuestionAiProcessingService questionAiProcessingService;
     private final SimilarQuestionService similarQuestionService;
+    private final CategoryQuestionRemappingService categoryQuestionRemappingService;
     private final TransactionTemplate transactionTemplate;
 
     public enum QuestionSortType {
@@ -483,12 +485,13 @@ public class QuestionService {
                                     question.getContent(),
                                     categoryInfo(question),
                                     question.getStatus(),
-                                    question.getLikeCount()
+                                    question.getLikeCount(),
+                                    result.similarity()
                             );
                         })
                         .toList();
 
-        return new SimilarResponse(found);
+        return new SimilarResponse(questionId, found);
     }
 
     @Transactional
@@ -854,121 +857,104 @@ public class QuestionService {
     }
 
     @Transactional
-    public CategoryBatchResponse saveCategories(
-            UUID spaceId,
-            CategoryBatchRequest request,
+    public CategoryMutation createCategory(
+            UUID documentId,
+            CategoryCreateRequest request,
             User user
     ) {
-        requireManager(
-                spaceId,
-                user
-        );
+        Document document = getDocument(documentId);
+        requireManager(document.getSpace().getId(), user);
+        String categoryName = name(request.name());
 
-        List<CategoryResult> out =
-                new ArrayList<>();
-
-        for (var operation :
-                request.operations()) {
-
-            Document document =
-                    requireDocument(
-                            operation.documentId(),
-                            spaceId
-                    );
-
-            QuestionCategory category;
-
-            switch (operation.type()) {
-
-                case CREATE -> {
-
-                    String name =
-                            name(operation.name());
-
-                    if (categories
-                            .existsByDocumentIdAndNameAndDeletedFalse(
-                                    document.getId(),
-                                    name
-                            )) {
-
-                        fail(
-                                QuestionErrorCode.CATEGORY_DUPLICATED
-                        );
-                    }
-
-                    category =
-                            categories.save(
-                                    QuestionCategory.createManual(
-                                            document,
-                                            name,
-                                            user
-                                    )
-                            );
-                }
-
-                case UPDATE -> {
-
-                    category =
-                            getCategory(
-                                    operation.categoryId(),
-                                    document.getId()
-                            );
-
-                    String name =
-                            name(operation.name());
-
-                    if (!category
-                            .getName()
-                            .equals(name)
-                            && categories
-                            .existsByDocumentIdAndNameAndDeletedFalse(
-                                    document.getId(),
-                                    name
-                            )) {
-
-                        fail(
-                                QuestionErrorCode.CATEGORY_DUPLICATED
-                        );
-                    }
-
-                    category.updateName(name);
-                }
-
-                case DELETE -> {
-
-                    category =
-                            getCategory(
-                                    operation.categoryId(),
-                                    document.getId()
-                            );
-
-                    category.delete();
-                }
-
-                default ->
-                        throw new BusinessException(
-                                QuestionErrorCode
-                                        .INVALID_CATEGORY_OPERATION
-                        );
-            }
-
-            out.add(
-                    new CategoryResult(
-                            operation.operationId(),
-                            operation.type().name(),
-                            document.getId(),
-                            operation.tempId(),
-                            category.getId(),
-                            category.getName(),
-                            "SUCCESS"
-                    )
-            );
+        if (categories.existsByDocumentIdAndNameAndDeletedFalse(documentId, categoryName)) {
+            fail(QuestionErrorCode.CATEGORY_DUPLICATED);
         }
 
-        return new CategoryBatchResponse(
-                out,
-                Instant.now()
+        QuestionCategory category = categories.save(
+                QuestionCategory.createManual(document, categoryName, user)
         );
+
+        categoryQuestionRemappingService.recalculate(category);
+
+        return new CategoryMutation(
+                category.getId(), documentId, category.getName(), category.getSourceType().name()
+        );
+    }
+
+    @Transactional
+    public CategoryMutation updateCategory(
+            UUID categoryId,
+            CategoryUpdateRequest request,
+            User user
+    ) {
+        QuestionCategory category = categories.findById(categoryId)
+                .filter(value -> !value.isDeleted())
+                .orElseThrow(() -> new BusinessException(QuestionErrorCode.CATEGORY_NOT_FOUND));
+
+        requireManager(category.getDocument().getSpace().getId(), user);
+        String categoryName = name(request.name());
+
+        if (!category.getName().equals(categoryName)
+                && categories.existsByDocumentIdAndNameAndDeletedFalse(
+                        category.getDocument().getId(), categoryName)) {
+            fail(QuestionErrorCode.CATEGORY_DUPLICATED);
+        }
+
+        category.updateName(categoryName);
+        categoryQuestionRemappingService.recalculate(category);
+
+        return new CategoryMutation(
+                category.getId(), category.getDocument().getId(), category.getName(), category.getSourceType().name()
+        );
+    }
+
+    @Transactional
+    public CategoryMutation deleteCategory(
+            UUID categoryId,
+            User user
+    ) {
+        QuestionCategory category = categories.findById(categoryId)
+                .filter(value -> !value.isDeleted())
+                .orElseThrow(() -> new BusinessException(QuestionErrorCode.CATEGORY_NOT_FOUND));
+
+        requireManager(category.getDocument().getSpace().getId(), user);
+        category.delete();
+        mappings.deleteAllByCategoryId(categoryId);
+
+        return new CategoryMutation(
+                category.getId(), category.getDocument().getId(), category.getName(), category.getSourceType().name()
+        );
+    }
+
+    public CategorizedQuestionsResponse categorizedQuestions(
+            UUID documentId,
+            User user
+    ) {
+        Document document = getDocument(documentId);
+        requireMember(document.getSpace().getId(), user);
+
+        List<CategoryGroup> groups = categories.findAllByDocumentIdAndDeletedFalse(documentId)
+                .stream()
+                .map(category -> new CategoryGroup(
+                        category.getId(),
+                        category.getName(),
+                        mappings.findAllByCategoryId(category.getId()).stream()
+                                .map(mapping -> mapping.getQuestion())
+                                .filter(question -> !question.isDeleted())
+                                .filter(question -> question.getQuestionScope() == com.tikitaka.question.entity.QuestionScope.COURSE_RELATED)
+                                .sorted(Comparator.comparing(Question::getCreatedAt).reversed())
+                                .map(question -> new CategorizedQuestion(
+                                        question.getId(),
+                                        question.getTitle(),
+                                        question.getContent(),
+                                        question.getStatus(),
+                                        question.getLikeCount()
+                                ))
+                                .toList()
+                ))
+                .toList();
+
+        return new CategorizedQuestionsResponse(documentId, groups);
     }
 
     public ExportResponse export(

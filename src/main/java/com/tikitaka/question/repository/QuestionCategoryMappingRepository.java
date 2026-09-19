@@ -31,4 +31,8 @@ public interface QuestionCategoryMappingRepository
     void deleteAllByQuestionId(
             UUID questionId
     );
+
+    void deleteAllByCategoryId(
+            UUID categoryId
+    );
 }

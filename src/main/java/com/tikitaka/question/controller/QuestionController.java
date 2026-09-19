@@ -287,21 +287,53 @@ public class QuestionController {
         );
     }
 
-    @Operation(summary = "QST-019 질문 카테고리 일괄 저장")
-    @PatchMapping("/api/v1/spaces/{spaceId}/question-categories")
-    public CategoryBatchResponse saveQuestionCategories(
-            @PathVariable UUID spaceId,
-            @Valid @RequestBody CategoryBatchRequest request,
+    @Operation(summary = "QST-019 질문 카테고리 수동 추가")
+    @PostMapping("/api/v1/documents/{documentId}/categories")
+    public CategoryMutation createCategory(
+            @PathVariable UUID documentId,
+            @Valid @RequestBody CategoryCreateRequest request,
             Authentication authentication
     ) {
-        return questionService.saveCategories(
-                spaceId,
-                request,
-                currentUserResolver.resolve(authentication)
+        return questionService.createCategory(
+                documentId, request, currentUserResolver.resolve(authentication)
         );
     }
 
-    @Operation(summary = "QST-020 질문·답변 데이터 CSV 내보내기")
+    @Operation(summary = "QST-020 질문 카테고리 수정")
+    @PatchMapping("/api/v1/categories/{categoryId}")
+    public CategoryMutation updateCategory(
+            @PathVariable UUID categoryId,
+            @Valid @RequestBody CategoryUpdateRequest request,
+            Authentication authentication
+    ) {
+        return questionService.updateCategory(
+                categoryId, request, currentUserResolver.resolve(authentication)
+        );
+    }
+
+    @Operation(summary = "QST-021 질문 카테고리 삭제")
+    @DeleteMapping("/api/v1/categories/{categoryId}")
+    public CategoryMutation deleteCategory(
+            @PathVariable UUID categoryId,
+            Authentication authentication
+    ) {
+        return questionService.deleteCategory(
+                categoryId, currentUserResolver.resolve(authentication)
+        );
+    }
+
+    @Operation(summary = "QST-024 카테고리별 질문 묶음 조회")
+    @GetMapping("/api/v1/documents/{documentId}/categorized-questions")
+    public CategorizedQuestionsResponse categorizedQuestions(
+            @PathVariable UUID documentId,
+            Authentication authentication
+    ) {
+        return questionService.categorizedQuestions(
+                documentId, currentUserResolver.resolve(authentication)
+        );
+    }
+
+    @Operation(summary = "질문·답변 데이터 CSV 내보내기")
     @GetMapping("/api/v1/spaces/{spaceId}/questions/export")
     public ExportResponse exportQuestions(
             @PathVariable UUID spaceId,

@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -28,10 +29,6 @@ public class QuestionAiProcessingService {
     private static final int EMBEDDING_DIMENSION =
             768;
 
-    private static final double
-            CATEGORY_CONFIDENCE_THRESHOLD =
-            0.75;
-
     private final QuestionAiClient
             questionAiClient;
 
@@ -49,6 +46,9 @@ public class QuestionAiProcessingService {
 
     private final TransactionTemplate
             transactionTemplate;
+
+    @Value("${question.ai.category-confidence-threshold:0.75}")
+    private double categoryConfidenceThreshold;
 
     public void process(
             UUID questionId,
@@ -354,7 +354,7 @@ public class QuestionAiProcessingService {
         ) {
 
             if (result.confidence()
-                    < CATEGORY_CONFIDENCE_THRESHOLD) {
+                    < categoryConfidenceThreshold) {
 
                 continue;
             }
