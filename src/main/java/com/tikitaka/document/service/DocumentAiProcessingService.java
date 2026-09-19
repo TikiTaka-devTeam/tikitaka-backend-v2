@@ -6,6 +6,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
@@ -23,8 +24,10 @@ import com.tikitaka.question.repository.QuestionCategoryMappingRepository;
 import com.tikitaka.question.repository.QuestionCategoryRepository;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class DocumentAiProcessingService {
 
@@ -37,6 +40,25 @@ public class DocumentAiProcessingService {
     private final QuestionCategoryMappingRepository
             questionCategoryMappingRepository;
     private final PlatformTransactionManager transactionManager;
+
+    /**
+     * 문서 등록 트랜잭션이 커밋된 뒤 별도 작업으로 AI 분석을 수행한다.
+     */
+    @Async
+    public void processAsync(
+            UUID documentId,
+            byte[] pdfBytes
+    ) {
+        try {
+            process(documentId, pdfBytes);
+        } catch (RuntimeException exception) {
+            log.warn(
+                    "Document AI processing failed. documentId={}",
+                    documentId,
+                    exception
+            );
+        }
+    }
 
     public void process(
             UUID documentId,

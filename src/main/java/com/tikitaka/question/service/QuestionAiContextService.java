@@ -2,6 +2,8 @@ package com.tikitaka.question.service;
 
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -21,12 +23,16 @@ import lombok.RequiredArgsConstructor;
 public class QuestionAiContextService {
 
     private static final int MAX_DOCUMENT_CONTEXT_CHARS = 60_000;
+    private static final int MAX_CACHED_DOCUMENT_VERSIONS = 64;
 
     private final DocumentRepository documentRepository;
     private final SlideRepository slideRepository;
     private final DocumentStorage documentStorage;
     private final PdfTextExtractService pdfTextExtractService;
     private final TransactionTemplate transactionTemplate;
+
+    private final ConcurrentMap<DocumentCacheKey, List<DocumentAnalyzeRequest.PageContent>>
+            pageCache = new ConcurrentHashMap<>();
 
     public Context load(
             UUID documentId,
@@ -43,11 +49,28 @@ public class QuestionAiContextService {
             );
         }
 
-        byte[] pdfBytes =
-                documentStorage.get(source.pdfKey());
+        DocumentCacheKey cacheKey = new DocumentCacheKey(
+                source.documentId(),
+                source.documentVersion()
+        );
+
+        pageCache.keySet().removeIf(key ->
+                key.documentId().equals(source.documentId())
+                        && !key.documentVersion().equals(source.documentVersion())
+        );
+
+        if (!pageCache.containsKey(cacheKey)
+                && pageCache.size() >= MAX_CACHED_DOCUMENT_VERSIONS) {
+            pageCache.clear();
+        }
 
         List<DocumentAnalyzeRequest.PageContent> pages =
-                pdfTextExtractService.extractPages(pdfBytes);
+                pageCache.computeIfAbsent(
+                        cacheKey,
+                        ignored -> pdfTextExtractService.extractPages(
+                                documentStorage.get(source.pdfKey())
+                        )
+                );
 
         String slideContext =
                 source.slidePageNumber() == null
@@ -102,6 +125,8 @@ public class QuestionAiContextService {
         }
 
         return new ContextSource(
+                document.getId(),
+                document.getVersion(),
                 document.getPdfKey(),
                 slidePageNumber
         );
@@ -171,8 +196,16 @@ public class QuestionAiContextService {
     }
 
     private record ContextSource(
+            UUID documentId,
+            Integer documentVersion,
             String pdfKey,
             Integer slidePageNumber
+    ) {
+    }
+
+    private record DocumentCacheKey(
+            UUID documentId,
+            Integer documentVersion
     ) {
     }
 }

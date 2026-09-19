@@ -21,6 +21,7 @@ import com.tikitaka.document.repository.DocumentRepository;
 import com.tikitaka.document.repository.SlideRepository;
 import com.tikitaka.global.common.cursor.CursorCodec;
 import com.tikitaka.global.exception.BusinessException;
+import com.tikitaka.question.dto.request.CategoryBatchRequest;
 import com.tikitaka.question.dto.request.CategoryCreateRequest;
 import com.tikitaka.question.dto.request.CategoryUpdateRequest;
 import com.tikitaka.question.dto.request.CommentCreateRequest;
@@ -856,6 +857,74 @@ public class QuestionService {
         );
     }
 
+    /**
+     * 이전 프론트엔드가 사용하는 카테고리 일괄 저장 API 호환용 구현이다.
+     */
+    @Transactional
+    public CategoryBatchResponse saveCategories(
+            UUID spaceId,
+            CategoryBatchRequest request,
+            User user
+    ) {
+        requireManager(spaceId, user);
+
+        List<CategoryResult> results = new ArrayList<>();
+
+        for (CategoryBatchRequest.Operation operation : request.operations()) {
+            Document document = requireDocument(operation.documentId(), spaceId);
+            QuestionCategory category;
+
+            switch (operation.type()) {
+                case CREATE -> {
+                    String categoryName = name(operation.name());
+
+                    if (categories.existsByDocumentIdAndNameAndDeletedFalse(
+                            document.getId(), categoryName)) {
+                        fail(QuestionErrorCode.CATEGORY_DUPLICATED);
+                    }
+
+                    category = categories.save(
+                            QuestionCategory.createManual(document, categoryName, user));
+                }
+                case UPDATE -> {
+                    category = getCategory(operation.categoryId(), document.getId());
+                    String categoryName = name(operation.name());
+
+                    if (!category.getName().equals(categoryName)
+                            && categories.existsByDocumentIdAndNameAndDeletedFalse(
+                                    document.getId(), categoryName)) {
+                        fail(QuestionErrorCode.CATEGORY_DUPLICATED);
+                    }
+
+                    category.updateName(categoryName);
+                }
+                case DELETE -> {
+                    category = getCategory(operation.categoryId(), document.getId());
+                    category.delete();
+                    mappings.deleteAllByCategoryId(category.getId());
+                }
+                default -> throw new BusinessException(
+                        QuestionErrorCode.INVALID_CATEGORY_OPERATION);
+            }
+
+            results.add(new CategoryResult(
+                    operation.operationId(),
+                    operation.type().name(),
+                    document.getId(),
+                    operation.tempId(),
+                    category.getId(),
+                    category.getName(),
+                    "SUCCESS"
+            ));
+
+            if (operation.type() != CategoryBatchRequest.Type.DELETE) {
+                categoryQuestionRemappingService.scheduleRecalculation(document.getId());
+            }
+        }
+
+        return new CategoryBatchResponse(results, Instant.now());
+    }
+
     @Transactional
     public CategoryMutation createCategory(
             UUID documentId,
@@ -874,7 +943,7 @@ public class QuestionService {
                 QuestionCategory.createManual(document, categoryName, user)
         );
 
-        categoryQuestionRemappingService.recalculate(category);
+        categoryQuestionRemappingService.scheduleRecalculation(documentId);
 
         return new CategoryMutation(
                 category.getId(), documentId, category.getName(), category.getSourceType().name()
@@ -901,7 +970,9 @@ public class QuestionService {
         }
 
         category.updateName(categoryName);
-        categoryQuestionRemappingService.recalculate(category);
+        categoryQuestionRemappingService.scheduleRecalculation(
+                category.getDocument().getId()
+        );
 
         return new CategoryMutation(
                 category.getId(), category.getDocument().getId(), category.getName(), category.getSourceType().name()
@@ -1139,7 +1210,9 @@ public class QuestionService {
                 author(answer.getAuthor()),
                 answer.getContent(),
                 answer.getCreatedAt(),
-                answer.getUpdatedAt()
+                answer.getUpdatedAt(),
+                answer.getAnswerType(),
+                answer.getTranscript()
         );
     }
 

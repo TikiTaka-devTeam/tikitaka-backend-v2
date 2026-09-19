@@ -287,6 +287,24 @@ public class QuestionController {
         );
     }
 
+    @Deprecated
+    @Operation(
+            summary = "QST-018-LEGACY 질문 카테고리 일괄 저장",
+            deprecated = true
+    )
+    @PatchMapping("/api/v1/spaces/{spaceId}/question-categories")
+    public CategoryBatchResponse saveQuestionCategories(
+            @PathVariable UUID spaceId,
+            @Valid @RequestBody CategoryBatchRequest request,
+            Authentication authentication
+    ) {
+        return questionService.saveCategories(
+                spaceId,
+                request,
+                currentUserResolver.resolve(authentication)
+        );
+    }
+
     @Operation(summary = "QST-019 질문 카테고리 수동 추가")
     @PostMapping("/api/v1/documents/{documentId}/categories")
     public CategoryMutation createCategory(

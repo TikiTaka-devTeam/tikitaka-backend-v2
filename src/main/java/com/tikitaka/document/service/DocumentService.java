@@ -522,7 +522,7 @@ public class DocumentService {
 
                                 try {
                                     documentAiProcessingService
-                                            .process(
+                                            .processAsync(
                                                     documentId,
                                                     copiedPdfBytes
                                             );
