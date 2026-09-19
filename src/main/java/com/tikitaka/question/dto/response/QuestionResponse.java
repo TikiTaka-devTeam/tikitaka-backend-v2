@@ -1,7 +1,7 @@
 package com.tikitaka.question.dto.response;
 import java.time.Instant; import java.util.List; import java.util.UUID;
 import com.fasterxml.jackson.annotation.JsonProperty; import com.tikitaka.question.entity.QuestionStatus;
-public final class QuestionResponses { private QuestionResponses() {}
+public final class QuestionResponse { private QuestionResponse() {}
  public record DocumentInfo(@JsonProperty("document_id") UUID documentId, String title) {}
  public record SlideInfo(@JsonProperty("slide_id") UUID slideId, @JsonProperty("page_number") Integer pageNumber, @JsonProperty("thumbnail_url") String thumbnailUrl) {}
  public record CategoryInfo(@JsonProperty("category_id") UUID categoryId, String name) {}
@@ -28,7 +28,7 @@ public final class QuestionResponses { private QuestionResponses() {}
  public record SpaceCreate(@JsonProperty("question_id") UUID questionId, DocumentInfo document, SlideInfo slide, String title, String content,
    List<CategoryInfo> categories, QuestionStatus status, @JsonProperty("created_at") Instant createdAt) {}
  public record SimilarItem(@JsonProperty("question_id") UUID questionId, String title, String content, List<CategoryInfo> categories,
-   QuestionStatus status, @JsonProperty("like_count") Integer likeCount, double similarity) {}
+   QuestionStatus status, @JsonProperty("like_count") Integer likeCount) {}
  public record SimilarResponse(@JsonProperty("similar_questions") List<SimilarItem> similarQuestions) {}
  public record Delete(@JsonProperty("question_id") UUID questionId, @JsonProperty("is_deleted") boolean deleted, @JsonProperty("deleted_at") Instant deletedAt) {}
  public record AnswerMutation(@JsonProperty("answer_id") UUID answerId, @JsonProperty("question_id") UUID questionId, String content,

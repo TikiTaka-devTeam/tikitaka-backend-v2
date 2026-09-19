@@ -1,6 +1,6 @@
 package com.tikitaka.question.service;
 
-import static com.tikitaka.question.dto.response.QuestionResponses.*;
+import static com.tikitaka.question.dto.response.QuestionResponse.*;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -24,7 +24,6 @@ import com.tikitaka.global.exception.BusinessException;
 import com.tikitaka.question.dto.request.CategoryBatchRequest;
 import com.tikitaka.question.dto.request.CommentCreateRequest;
 import com.tikitaka.question.dto.request.QuestionCreateRequest;
-import com.tikitaka.question.dto.request.SimilarQuestionRequest;
 import com.tikitaka.question.dto.request.SpaceQuestionCreateRequest;
 import com.tikitaka.question.entity.Answer;
 import com.tikitaka.question.entity.Question;
@@ -457,41 +456,22 @@ public class QuestionService {
     }
 
     public SimilarResponse similar(
-            UUID spaceId,
-            SimilarQuestionRequest request,
+            UUID questionId,
             User user
     ) {
-        requireStudent(
-                spaceId,
+        Question source =
+                getQuestion(questionId);
+
+        requireMember(
+                source.getDocument()
+                        .getSpace()
+                        .getId(),
                 user
         );
 
-        requireDocument(
-                request.documentId(),
-                spaceId
-        );
-
-        if (request.slideId() != null) {
-            Slide slide =
-                    getSlide(
-                            request.slideId()
-                    );
-
-            if (!slide.getDocument()
-                    .getId()
-                    .equals(request.documentId())) {
-                fail(QuestionErrorCode.SLIDE_NOT_FOUND);
-            }
-        }
-
         List<SimilarItem> found =
                 similarQuestionService
-                        .findSimilarQuestions(
-                                request.documentId(),
-                                request.slideId(),
-                                request.title(),
-                                request.content()
-                        )
+                        .findSimilarQuestions(questionId)
                         .stream()
                         .map(result -> {
                             Question question =
@@ -503,8 +483,7 @@ public class QuestionService {
                                     question.getContent(),
                                     categoryInfo(question),
                                     question.getStatus(),
-                                    question.getLikeCount(),
-                                    result.similarity()
+                                    question.getLikeCount()
                             );
                         })
                         .toList();

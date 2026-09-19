@@ -21,9 +21,6 @@ public record VoiceAnswerResponse(
 
         String transcript,
 
-        @JsonProperty("audio_url")
-        String audioUrl,
-
         @JsonProperty("created_at")
         Instant createdAt
 ) {

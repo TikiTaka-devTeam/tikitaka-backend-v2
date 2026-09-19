@@ -18,29 +18,35 @@ import jakarta.persistence.LockModeType;
 public interface QuestionRepository
         extends JpaRepository<Question, UUID> {
 
-    List<Question> findAllByDocumentIdAndDeletedFalse(
+    List<Question>
+    findAllByDocumentIdAndDeletedFalse(
             UUID documentId
     );
 
-    List<Question> findAllByDocumentSpaceIdAndDeletedFalse(
+    List<Question>
+    findAllByDocumentSpaceIdAndDeletedFalse(
             UUID spaceId
     );
 
-    List<Question> findAllByDocumentSpaceIdAndStudentIdAndDeletedFalse(
+    List<Question>
+    findAllByDocumentSpaceIdAndStudentIdAndDeletedFalse(
             UUID spaceId,
             UUID studentId
     );
 
-    List<Question> findAllByStudentIdAndDeletedFalse(
+    List<Question>
+    findAllByStudentIdAndDeletedFalse(
             UUID studentId
     );
 
-    List<Question> findAllByDocumentIdAndStatusAndDeletedFalse(
+    List<Question>
+    findAllByDocumentIdAndStatusAndDeletedFalse(
             UUID documentId,
             QuestionStatus status
     );
 
-    List<Question> findAllBySlideIdAndDeletedFalse(
+    List<Question>
+    findAllBySlideIdAndDeletedFalse(
             UUID slideId
     );
 
@@ -54,10 +60,6 @@ public interface QuestionRepository
             UUID studentId
     );
 
-    boolean existsByPrimaryCategoryIdAndDeletedFalse(
-        UUID primaryCategoryId
-    );
-
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     Optional<Question> findQuestionById(
             UUID id
@@ -65,24 +67,39 @@ public interface QuestionRepository
 
     @Query(
             value = """
-                    SELECT
+                    SELECT DISTINCT
                         q.id AS questionId,
                         1 - (
-                            q.embedding <=> CAST(:embedding AS vector)
+                            q.embedding
+                            <=> CAST(:embedding AS vector)
                         ) AS similarity
                     FROM questions q
+                    JOIN question_category_mappings qcm
+                      ON qcm.question_id = q.id
                     WHERE q.document_id = :documentId
+                      AND q.id <> :questionId
                       AND q.is_deleted = false
                       AND q.embedding IS NOT NULL
                       AND q.question_scope = 'COURSE_RELATED'
-                    ORDER BY
-                        q.embedding <=> CAST(:embedding AS vector)
+                      AND qcm.category_id IN (:categoryIds)
+                    ORDER BY similarity DESC
                     LIMIT 5
                     """,
             nativeQuery = true
     )
-    List<QuestionSimilarityProjection> findSimilarQuestions(
-            @Param("documentId") UUID documentId,
-            @Param("embedding") String embedding
+    List<QuestionSimilarityProjection>
+    findSimilarQuestionsInCategories(
+
+            @Param("documentId")
+            UUID documentId,
+
+            @Param("questionId")
+            UUID questionId,
+
+            @Param("categoryIds")
+            List<UUID> categoryIds,
+
+            @Param("embedding")
+            String embedding
     );
 }

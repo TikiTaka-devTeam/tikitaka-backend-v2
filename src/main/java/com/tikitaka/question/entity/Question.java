@@ -77,18 +77,19 @@ public class Question extends BaseTimeEntity {
     @Column(name = "question_scope", length = 20)
     private QuestionScope questionScope;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "primary_category_id")
-    private QuestionCategory primaryCategory;
-
     @JdbcTypeCode(SqlTypes.VECTOR)
     @Array(length = EMBEDDING_DIMENSION)
     @Column(name = "embedding", columnDefinition = "vector(768)")
     private float[] embedding;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "ai_processing_status", nullable = false, length = 20)
-    private AiProcessingStatus aiProcessingStatus = AiProcessingStatus.PENDING;
+    @Column(
+            name = "ai_processing_status",
+            nullable = false,
+            length = 20
+    )
+    private AiProcessingStatus aiProcessingStatus =
+            AiProcessingStatus.PENDING;
 
     @Column(name = "ai_processed_at")
     private Instant aiProcessedAt;
@@ -115,7 +116,8 @@ public class Question extends BaseTimeEntity {
         this.content = content;
         this.xRatio = xRatio;
         this.yRatio = yRatio;
-        this.aiProcessingStatus = AiProcessingStatus.PENDING;
+        this.aiProcessingStatus =
+                AiProcessingStatus.PENDING;
     }
 
     public static Question create(
@@ -156,52 +158,73 @@ public class Question extends BaseTimeEntity {
     }
 
     public void startAiProcessing() {
-        this.aiProcessingStatus = AiProcessingStatus.PROCESSING;
+        this.aiProcessingStatus =
+                AiProcessingStatus.PROCESSING;
     }
 
     public void completeCourseRelatedProcessing(
-            QuestionCategory primaryCategory,
             float[] embedding
     ) {
         validateEmbedding(embedding);
 
-        this.questionScope = QuestionScope.COURSE_RELATED;
-        this.primaryCategory = primaryCategory;
+        this.questionScope =
+                QuestionScope.COURSE_RELATED;
+
         this.embedding = embedding;
-        this.aiProcessingStatus = AiProcessingStatus.COMPLETED;
-        this.aiProcessedAt = Instant.now();
+
+        this.aiProcessingStatus =
+                AiProcessingStatus.COMPLETED;
+
+        this.aiProcessedAt =
+                Instant.now();
     }
 
     public void completeOtherProcessing() {
-        this.questionScope = QuestionScope.OTHER;
-        this.primaryCategory = null;
+        this.questionScope =
+                QuestionScope.OTHER;
+
         this.embedding = null;
-        this.aiProcessingStatus = AiProcessingStatus.COMPLETED;
-        this.aiProcessedAt = Instant.now();
+
+        this.aiProcessingStatus =
+                AiProcessingStatus.COMPLETED;
+
+        this.aiProcessedAt =
+                Instant.now();
     }
 
     public void failAiProcessing() {
         this.questionScope = null;
-        this.primaryCategory = null;
         this.embedding = null;
-        this.aiProcessingStatus = AiProcessingStatus.FAILED;
+
+        this.aiProcessingStatus =
+                AiProcessingStatus.FAILED;
+
         this.aiProcessedAt = null;
     }
 
-    private void validateEmbedding(float[] embedding) {
-        if (embedding == null || embedding.length != EMBEDDING_DIMENSION) {
+    private void validateEmbedding(
+            float[] embedding
+    ) {
+        if (embedding == null
+                || embedding.length
+                != EMBEDDING_DIMENSION) {
+
             throw new IllegalArgumentException(
-                    "Embedding dimension must be " + EMBEDDING_DIMENSION + "."
+                    "Embedding dimension must be "
+                            + EMBEDDING_DIMENSION
+                            + "."
             );
         }
     }
 
     public void markAnswered() {
-        this.status = QuestionStatus.ANSWERED;
+        this.status =
+                QuestionStatus.ANSWERED;
     }
 
     public void markPending() {
-        this.status = QuestionStatus.PENDING;
+        this.status =
+                QuestionStatus.PENDING;
     }
 
     public void increaseViewCount() {
@@ -220,6 +243,7 @@ public class Question extends BaseTimeEntity {
 
     public void delete() {
         this.deleted = true;
-        this.deletedAt = Instant.now();
+        this.deletedAt =
+                Instant.now();
     }
 }

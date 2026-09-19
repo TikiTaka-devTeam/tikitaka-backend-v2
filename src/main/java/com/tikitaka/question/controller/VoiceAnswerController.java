@@ -33,28 +33,42 @@ import lombok.RequiredArgsConstructor;
 )
 public class VoiceAnswerController {
 
-    private final VoiceAnswerService voiceAnswerService;
-    private final CurrentUserResolver currentUserResolver;
+    private final VoiceAnswerService
+            voiceAnswerService;
+
+    private final CurrentUserResolver
+            currentUserResolver;
 
     @Operation(
-            summary = "QST-021 음성 공식 답변 등록",
+            summary =
+                    "QST-023 음성 공식 답변 등록",
             description = """
-                    교수 또는 QUESTION_MANAGE 권한을 가진 조교가
-                    음성 파일을 이용해 공식 답변을 등록합니다.
+                    교수가 음성 파일을 이용해 공식 답변을 등록합니다.
 
-                    원본 음성을 저장한 뒤 AI STT 및 발화 정규화를 수행하고,
+                    음성 파일을 AI STT 및 발화 정규화에 사용하고,
                     정규화된 내용을 공식 답변으로 저장합니다.
+                    원본 음성은 영구 저장하지 않습니다.
                     """
     )
     @PostMapping(
-            value = "/api/v1/questions/{questionId}/answers/voice",
-            consumes = MediaType.MULTIPART_FORM_DATA_VALUE
+            value =
+                    "/api/v1/questions/{questionId}/answers/voice",
+            consumes =
+                    MediaType.MULTIPART_FORM_DATA_VALUE
     )
-    public ResponseEntity<VoiceAnswerResponse> createVoiceAnswer(
-            @PathVariable UUID questionId,
-            @RequestPart("file") MultipartFile file,
+    public ResponseEntity<
+            VoiceAnswerResponse
+            > createVoiceAnswer(
+
+            @PathVariable
+            UUID questionId,
+
+            @RequestPart("file")
+            MultipartFile file,
+
             Authentication authentication
     ) {
+
         User currentUser =
                 currentUserResolver.resolve(
                         authentication

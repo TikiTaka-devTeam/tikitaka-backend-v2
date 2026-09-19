@@ -19,8 +19,6 @@ import com.tikitaka.question.entity.CategorySourceType;
 import com.tikitaka.question.entity.QuestionCategory;
 import com.tikitaka.question.repository.QuestionCategoryMappingRepository;
 import com.tikitaka.question.repository.QuestionCategoryRepository;
-import com.tikitaka.question.repository.QuestionClusterRepository;
-import com.tikitaka.question.repository.QuestionRepository;
 
 import lombok.RequiredArgsConstructor;
 
@@ -36,10 +34,6 @@ public class DocumentAiProcessingService {
             questionCategoryRepository;
     private final QuestionCategoryMappingRepository
             questionCategoryMappingRepository;
-    private final QuestionRepository questionRepository;
-    private final QuestionClusterRepository
-            questionClusterRepository;
-
     private final TransactionTemplate transactionTemplate;
 
     public void process(
@@ -261,14 +255,6 @@ public class DocumentAiProcessingService {
             UUID categoryId
     ) {
         return questionCategoryMappingRepository
-                .existsByCategoryId(
-                        categoryId
-                )
-                || questionRepository
-                .existsByPrimaryCategoryIdAndDeletedFalse(
-                        categoryId
-                )
-                || questionClusterRepository
                 .existsByCategoryId(
                         categoryId
                 );

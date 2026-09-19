@@ -31,15 +31,30 @@ public class Answer extends BaseTimeEntity {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "question_id", nullable = false)
+    @ManyToOne(
+            fetch = FetchType.LAZY,
+            optional = false
+    )
+    @JoinColumn(
+            name = "question_id",
+            nullable = false
+    )
     private Question question;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "author_id", nullable = false)
+    @ManyToOne(
+            fetch = FetchType.LAZY,
+            optional = false
+    )
+    @JoinColumn(
+            name = "author_id",
+            nullable = false
+    )
     private User author;
 
-    @Column(nullable = false, columnDefinition = "text")
+    @Column(
+            nullable = false,
+            columnDefinition = "text"
+    )
     private String content;
 
     @Enumerated(EnumType.STRING)
@@ -50,12 +65,6 @@ public class Answer extends BaseTimeEntity {
     )
     private AnswerType answerType =
             AnswerType.TEXT;
-
-    @Column(
-            name = "audio_url",
-            columnDefinition = "text"
-    )
-    private String audioUrl;
 
     @Column(
             name = "transcript",
@@ -69,9 +78,7 @@ public class Answer extends BaseTimeEntity {
     )
     private boolean deleted = false;
 
-    @Column(
-            name = "deleted_at"
-    )
+    @Column(name = "deleted_at")
     private Instant deletedAt;
 
     private Answer(
@@ -79,14 +86,12 @@ public class Answer extends BaseTimeEntity {
             User author,
             String content,
             AnswerType answerType,
-            String audioUrl,
             String transcript
     ) {
         this.question = question;
         this.author = author;
         this.content = content;
         this.answerType = answerType;
-        this.audioUrl = audioUrl;
         this.transcript = transcript;
     }
 
@@ -107,12 +112,12 @@ public class Answer extends BaseTimeEntity {
             User author,
             String content
     ) {
+
         return new Answer(
                 question,
                 author,
                 content,
                 AnswerType.TEXT,
-                null,
                 null
         );
     }
@@ -121,15 +126,14 @@ public class Answer extends BaseTimeEntity {
             Question question,
             User author,
             String content,
-            String audioUrl,
             String transcript
     ) {
+
         return new Answer(
                 question,
                 author,
                 content,
                 AnswerType.VOICE,
-                audioUrl,
                 transcript
         );
     }
@@ -142,6 +146,7 @@ public class Answer extends BaseTimeEntity {
 
     public void delete() {
         this.deleted = true;
-        this.deletedAt = Instant.now();
+        this.deletedAt =
+                Instant.now();
     }
 }
