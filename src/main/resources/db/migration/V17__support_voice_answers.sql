@@ -1,6 +1,7 @@
+-- Support text / voice official answers
+
 ALTER TABLE answers
     ADD COLUMN answer_type VARCHAR(20) NOT NULL DEFAULT 'TEXT',
-    ADD COLUMN audio_url TEXT,
     ADD COLUMN transcript TEXT;
 
 ALTER TABLE answers
