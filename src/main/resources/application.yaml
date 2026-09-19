@@ -140,3 +140,7 @@ document:
   revision:
     inactivity-timeout: ${DOCUMENT_REVISION_INACTIVITY_TIMEOUT:PT30M}
     cleanup-fixed-delay: ${DOCUMENT_REVISION_CLEANUP_FIXED_DELAY:PT5M}
+
+question:
+  ai:
+    category-confidence-threshold: ${QUESTION_AI_CATEGORY_CONFIDENCE_THRESHOLD:0.75}

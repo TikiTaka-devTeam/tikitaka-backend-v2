@@ -31,10 +31,13 @@ import com.tikitaka.document.storage.DocumentStorage;
 import com.tikitaka.global.s3.S3ObjectNames;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class DocumentRevisionCompletionWorker {
+
     private final TransactionTemplate transactionTemplate;
     private final DocumentRevisionRepository revisionRepository;
     private final RevisionPageRepository revisionPageRepository;
@@ -43,110 +46,275 @@ public class DocumentRevisionCompletionWorker {
     private final DocumentStorage storage;
     private final RevisionPdfComposer pdfComposer;
     private final PdfProcessor pdfProcessor;
+    private final DocumentAiProcessingService documentAiProcessingService;
 
     @Async
     public void completeAsync(UUID revisionId) {
         List<String> uploadedKeys = new ArrayList<>();
+
         try {
-            transactionTemplate.executeWithoutResult(status -> complete(revisionId, uploadedKeys));
+            transactionTemplate.executeWithoutResult(
+                    status -> complete(revisionId, uploadedKeys)
+            );
+
         } catch (RuntimeException exception) {
             cleanup(uploadedKeys);
-            transactionTemplate.executeWithoutResult(status -> markFailed(revisionId));
+
+            transactionTemplate.executeWithoutResult(
+                    status -> markFailed(revisionId)
+            );
+
+            log.error(
+                    "Document revision completion failed. revisionId={}",
+                    revisionId,
+                    exception
+            );
         }
     }
 
-    private void complete(UUID revisionId, List<String> uploadedKeys) {
-        DocumentRevision revision = revisionRepository.findByIdForUpdate(revisionId).orElse(null);
-        if (revision == null || revision.getStatus() != RevisionStatus.PROCESSING) {
+    private void complete(
+            UUID revisionId,
+            List<String> uploadedKeys
+    ) {
+        DocumentRevision revision =
+                revisionRepository.findByIdForUpdate(revisionId)
+                        .orElse(null);
+
+        if (revision == null
+                || revision.getStatus() != RevisionStatus.PROCESSING) {
             return;
         }
 
         Document document = revision.getDocument();
-        List<RevisionPage> pages = revisionPageRepository.findAllByRevisionIdOrderByPositionAsc(revisionId);
+        UUID documentId = document.getId();
+
+        List<RevisionPage> pages =
+                revisionPageRepository
+                        .findAllByRevisionIdOrderByPositionAsc(revisionId);
+
         Map<UUID, Integer> originalPageNumbers = new HashMap<>();
         Map<UUID, Integer> sourcePageNumbers = new HashMap<>();
+
         for (RevisionPage page : pages) {
             if (page.getSourceType() == RevisionSourceType.ORIGINAL) {
-                originalPageNumbers.put(page.getOriginalSlide().getId(), page.getOriginalSlide().getPageNumber());
+                originalPageNumbers.put(
+                        page.getOriginalSlide().getId(),
+                        page.getOriginalSlide().getPageNumber()
+                );
             } else {
-                sourcePageNumbers.put(page.getRevisionSlide().getId(), page.getRevisionSlide().getSourcePageNumber());
+                sourcePageNumbers.put(
+                        page.getRevisionSlide().getId(),
+                        page.getRevisionSlide().getSourcePageNumber()
+                );
             }
         }
 
-        byte[] composedPdf = pdfComposer.compose(
-                storage.get(document.getPdfKey()),
-                revision.getSourcePdfKey() == null ? null : storage.get(revision.getSourcePdfKey()),
-                pages,
-                originalPageNumbers,
-                sourcePageNumbers);
-        ProcessedPdf processed = pdfProcessor.process(composedPdf);
-        String root = "documents/" + document.getId() + "/revisions/" + revisionId + "/completed/" + UUID.randomUUID();
-        String pdfKey = root + "/document.pdf";
-        String documentThumbnailKey = root + "/" + S3ObjectNames.imageFilename(document.getTitle(), "썸네일", ".png");
-        put(uploadedKeys, pdfKey, processed.originalBytes(), MediaType.APPLICATION_PDF_VALUE);
-        put(uploadedKeys, documentThumbnailKey, processed.pageThumbnails().get(0), MediaType.IMAGE_PNG_VALUE);
+        byte[] composedPdf =
+                pdfComposer.compose(
+                        storage.get(document.getPdfKey()),
+                        revision.getSourcePdfKey() == null
+                                ? null
+                                : storage.get(revision.getSourcePdfKey()),
+                        pages,
+                        originalPageNumbers,
+                        sourcePageNumbers
+                );
 
-        Map<UUID, String> changedSlideThumbnailKeys = new HashMap<>();
+        ProcessedPdf processed =
+                pdfProcessor.process(composedPdf);
+
+        byte[] finalPdfBytes = processed.originalBytes();
+
+        String root =
+                "documents/"
+                        + documentId
+                        + "/revisions/"
+                        + revisionId
+                        + "/completed/"
+                        + UUID.randomUUID();
+
+        String pdfKey = root + "/document.pdf";
+
+        String documentThumbnailKey =
+                root
+                        + "/"
+                        + S3ObjectNames.imageFilename(
+                                document.getTitle(),
+                                "썸네일",
+                                ".png"
+                        );
+
+        put(
+                uploadedKeys,
+                pdfKey,
+                finalPdfBytes,
+                MediaType.APPLICATION_PDF_VALUE
+        );
+
+        put(
+                uploadedKeys,
+                documentThumbnailKey,
+                processed.pageThumbnails().get(0),
+                MediaType.IMAGE_PNG_VALUE
+        );
+
+        Map<UUID, String> changedSlideThumbnailKeys =
+                new HashMap<>();
+
         int outputIndex = 0;
+
         for (RevisionPage page : pages) {
             if (page.getSourceType() == RevisionSourceType.REVISION
                     && page.getStatus() == RevisionPageStatus.DELETE_PENDING) {
                 continue;
             }
+
             if (page.getStatus() == RevisionPageStatus.DELETE_PENDING
                     || page.getSourceType() == RevisionSourceType.REVISION) {
-                String key = root + "/slides/" + S3ObjectNames.imageFilename(document.getTitle(), "슬라이드_" + (outputIndex + 1), ".png");
-                put(uploadedKeys, key, processed.pageThumbnails().get(outputIndex), MediaType.IMAGE_PNG_VALUE);
-                changedSlideThumbnailKeys.put(page.getId(), key);
+
+                String key =
+                        root
+                                + "/slides/"
+                                + S3ObjectNames.imageFilename(
+                                        document.getTitle(),
+                                        "슬라이드_" + (outputIndex + 1),
+                                        ".png"
+                                );
+
+                put(
+                        uploadedKeys,
+                        key,
+                        processed.pageThumbnails().get(outputIndex),
+                        MediaType.IMAGE_PNG_VALUE
+                );
+
+                changedSlideThumbnailKeys.put(
+                        page.getId(),
+                        key
+                );
             }
+
             outputIndex++;
         }
 
-        List<String> obsoleteKeys = new ArrayList<>(List.of(document.getPdfKey(), document.getThumbnailKey()));
+        List<String> obsoleteKeys =
+                new ArrayList<>(
+                        List.of(
+                                document.getPdfKey(),
+                                document.getThumbnailKey()
+                        )
+                );
+
         if (revision.getSourcePdfKey() != null) {
             obsoleteKeys.add(revision.getSourcePdfKey());
         }
-        revisionSlideRepository.findAllByRevisionIdOrderBySourcePageNumberAsc(revisionId)
-                .forEach(slide -> obsoleteKeys.add(slide.getThumbnailKey()));
-        List<Slide> existingSlides = slideRepository.findAllByDocumentIdOrderByPageNumberAsc(document.getId());
-        existingSlides.forEach(slide -> slide.changePageNumber(slide.getPageNumber() + 1000));
+
+        revisionSlideRepository
+                .findAllByRevisionIdOrderBySourcePageNumberAsc(revisionId)
+                .forEach(slide ->
+                        obsoleteKeys.add(slide.getThumbnailKey())
+                );
+
+        List<Slide> existingSlides =
+                slideRepository
+                        .findAllByDocumentIdOrderByPageNumberAsc(documentId);
+
+        existingSlides.forEach(slide ->
+                slide.changePageNumber(
+                        slide.getPageNumber() + 1000
+                )
+        );
+
         slideRepository.flush();
 
         List<Slide> insertedSlides = new ArrayList<>();
+
         for (RevisionPage page : pages) {
             if (page.getSourceType() == RevisionSourceType.REVISION
                     && page.getStatus() == RevisionPageStatus.DELETE_PENDING) {
                 continue;
             }
+
             if (page.getSourceType() == RevisionSourceType.ORIGINAL) {
                 Slide slide = page.getOriginalSlide();
+
                 slide.changePageNumber(page.getPosition());
+
                 if (page.getStatus() == RevisionPageStatus.DELETE_PENDING) {
                     obsoleteKeys.add(slide.getThumbnailKey());
-                    slide.markPlaceholder(changedSlideThumbnailKeys.get(page.getId()));
+
+                    slide.markPlaceholder(
+                            changedSlideThumbnailKeys.get(page.getId())
+                    );
                 }
+
             } else {
-                insertedSlides.add(Slide.create(document, page.getPosition(), changedSlideThumbnailKeys.get(page.getId())));
+                insertedSlides.add(
+                        Slide.create(
+                                document,
+                                page.getPosition(),
+                                changedSlideThumbnailKeys.get(page.getId())
+                        )
+                );
             }
         }
+
         slideRepository.saveAll(insertedSlides);
-        document.replace(documentThumbnailKey, pdfKey, processed.pageCount());
+
+        document.replace(
+                documentThumbnailKey,
+                pdfKey,
+                processed.pageCount()
+        );
+
         revision.complete();
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCommit() {
-                cleanup(obsoleteKeys);
-            }
-        });
+
+        TransactionSynchronizationManager.registerSynchronization(
+                new TransactionSynchronization() {
+                    @Override
+                    public void afterCommit() {
+                        cleanup(obsoleteKeys);
+                        reanalyzeCategories(documentId, finalPdfBytes);
+                    }
+                }
+        );
+    }
+
+    private void reanalyzeCategories(
+            UUID documentId,
+            byte[] finalPdfBytes
+    ) {
+        try {
+            documentAiProcessingService.process(
+                    documentId,
+                    finalPdfBytes
+            );
+
+        } catch (RuntimeException exception) {
+            // Document revision 자체는 이미 정상 완료된 상태다.
+            // Category AI 재분석 실패는 Document의 FAILED 상태로만 남긴다.
+            log.warn(
+                    "Document category reanalysis failed after revision completion. documentId={}",
+                    documentId,
+                    exception
+            );
+        }
     }
 
     private void markFailed(UUID revisionId) {
         revisionRepository.findByIdForUpdate(revisionId)
-                .filter(revision -> revision.getStatus() == RevisionStatus.PROCESSING)
+                .filter(revision ->
+                        revision.getStatus() == RevisionStatus.PROCESSING
+                )
                 .ifPresent(DocumentRevision::fail);
     }
 
-    private void put(List<String> uploadedKeys, String key, byte[] content, String contentType) {
+    private void put(
+            List<String> uploadedKeys,
+            String key,
+            byte[] content,
+            String contentType
+    ) {
         storage.put(key, content, contentType);
         uploadedKeys.add(key);
     }
@@ -155,7 +323,12 @@ public class DocumentRevisionCompletionWorker {
         keys.forEach(key -> {
             try {
                 storage.delete(key);
-            } catch (RuntimeException ignored) {
+            } catch (RuntimeException exception) {
+                log.warn(
+                        "Failed to clean up document storage object. key={}",
+                        key,
+                        exception
+                );
             }
         });
     }

@@ -9,11 +9,30 @@ import com.tikitaka.question.entity.QuestionCategoryMapping;
 import com.tikitaka.question.entity.QuestionCategoryMappingId;
 
 public interface QuestionCategoryMappingRepository
-        extends JpaRepository<QuestionCategoryMapping, QuestionCategoryMappingId> {
+        extends JpaRepository<
+        QuestionCategoryMapping,
+        QuestionCategoryMappingId
+        > {
 
-    List<QuestionCategoryMapping> findAllByQuestionId(UUID questionId);
+    List<QuestionCategoryMapping>
+    findAllByQuestionId(
+            UUID questionId
+    );
 
-    List<QuestionCategoryMapping> findAllByCategoryId(UUID categoryId);
+    List<QuestionCategoryMapping>
+    findAllByCategoryId(
+            UUID categoryId
+    );
 
-    void deleteAllByQuestionId(UUID questionId);
+    boolean existsByCategoryId(
+            UUID categoryId
+    );
+
+    void deleteAllByQuestionId(
+            UUID questionId
+    );
+
+    void deleteAllByCategoryId(
+            UUID categoryId
+    );
 }

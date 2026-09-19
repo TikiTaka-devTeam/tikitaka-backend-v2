@@ -8,6 +8,8 @@ import com.tikitaka.user.entity.User;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -29,18 +31,51 @@ public class Answer extends BaseTimeEntity {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "question_id", nullable = false)
+    @ManyToOne(
+            fetch = FetchType.LAZY,
+            optional = false
+    )
+    @JoinColumn(
+            name = "question_id",
+            nullable = false
+    )
     private Question question;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "author_id", nullable = false)
+    @ManyToOne(
+            fetch = FetchType.LAZY,
+            optional = false
+    )
+    @JoinColumn(
+            name = "author_id",
+            nullable = false
+    )
     private User author;
 
-    @Column(nullable = false, columnDefinition = "TEXT")
+    @Column(
+            nullable = false,
+            columnDefinition = "text"
+    )
     private String content;
 
-    @Column(name = "is_deleted", nullable = false)
+    @Enumerated(EnumType.STRING)
+    @Column(
+            name = "answer_type",
+            nullable = false,
+            length = 20
+    )
+    private AnswerType answerType =
+            AnswerType.TEXT;
+
+    @Column(
+            name = "transcript",
+            columnDefinition = "text"
+    )
+    private String transcript;
+
+    @Column(
+            name = "is_deleted",
+            nullable = false
+    )
     private boolean deleted = false;
 
     @Column(name = "deleted_at")
@@ -49,11 +84,15 @@ public class Answer extends BaseTimeEntity {
     private Answer(
             Question question,
             User author,
-            String content
+            String content,
+            AnswerType answerType,
+            String transcript
     ) {
         this.question = question;
         this.author = author;
         this.content = content;
+        this.answerType = answerType;
+        this.transcript = transcript;
     }
 
     public static Answer create(
@@ -61,15 +100,53 @@ public class Answer extends BaseTimeEntity {
             User author,
             String content
     ) {
-        return new Answer(question, author, content);
+        return createText(
+                question,
+                author,
+                content
+        );
     }
 
-    public void updateContent(String content) {
+    public static Answer createText(
+            Question question,
+            User author,
+            String content
+    ) {
+
+        return new Answer(
+                question,
+                author,
+                content,
+                AnswerType.TEXT,
+                null
+        );
+    }
+
+    public static Answer createVoice(
+            Question question,
+            User author,
+            String content,
+            String transcript
+    ) {
+
+        return new Answer(
+                question,
+                author,
+                content,
+                AnswerType.VOICE,
+                transcript
+        );
+    }
+
+    public void updateContent(
+            String content
+    ) {
         this.content = content;
     }
 
     public void delete() {
         this.deleted = true;
-        this.deletedAt = Instant.now();
+        this.deletedAt =
+                Instant.now();
     }
 }
