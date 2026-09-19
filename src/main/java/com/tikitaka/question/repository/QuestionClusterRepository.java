@@ -5,11 +5,14 @@ import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import com.tikitaka.question.entity.QuestionCluster;
 import com.tikitaka.question.repository.projection.ClusterSimilarityProjection;
+
+import jakarta.persistence.LockModeType;
 
 public interface QuestionClusterRepository
         extends JpaRepository<QuestionCluster, UUID> {
@@ -19,7 +22,12 @@ public interface QuestionClusterRepository
     );
 
     boolean existsByCategoryId(
-        UUID categoryId
+            UUID categoryId
+    );
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    Optional<QuestionCluster> findQuestionClusterById(
+            UUID id
     );
 
     @Query(

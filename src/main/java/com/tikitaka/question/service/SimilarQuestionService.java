@@ -27,11 +27,13 @@ public class SimilarQuestionService {
     private final QuestionAiClient questionAiClient;
     private final QuestionRepository questionRepository;
     private final QuestionCategoryRepository questionCategoryRepository;
+    private final QuestionAiContextService questionAiContextService;
     private final TransactionTemplate transactionTemplate;
 
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public List<Result> findSimilarQuestions(
             UUID documentId,
+            UUID slideId,
             String title,
             String content
     ) {
@@ -53,13 +55,19 @@ public class SimilarQuestionService {
             categoryCandidates = List.of();
         }
 
+        QuestionAiContextService.Context context =
+                questionAiContextService.load(
+                        documentId,
+                        slideId
+                );
+
         QuestionAnalyzeRequest request =
                 new QuestionAnalyzeRequest(
                         UUID.randomUUID(),
                         title,
                         content,
-                        null,
-                        null,
+                        context.slideContext(),
+                        context.documentContext(),
                         categoryCandidates
                 );
 
@@ -70,14 +78,10 @@ public class SimilarQuestionService {
             return List.of();
         }
 
-        validateEmbedding(
-                response.embedding()
-        );
+        validateEmbedding(response.embedding());
 
         String pgVector =
-                toPgVector(
-                        response.embedding()
-                );
+                toPgVector(response.embedding());
 
         List<Result> results =
                 transactionTemplate.execute(status ->
@@ -101,9 +105,7 @@ public class SimilarQuestionService {
     ) {
         Question question =
                 questionRepository
-                        .findById(
-                                projection.getQuestionId()
-                        )
+                        .findById(projection.getQuestionId())
                         .orElseThrow(() ->
                                 new IllegalStateException(
                                         "Similar question not found: "
@@ -126,9 +128,7 @@ public class SimilarQuestionService {
             float[] embedding
     ) {
         if (embedding == null
-                || embedding.length
-                != EMBEDDING_DIMENSION) {
-
+                || embedding.length != EMBEDDING_DIMENSION) {
             throw new IllegalStateException(
                     "Similar question embedding dimension must be "
                             + EMBEDDING_DIMENSION
@@ -141,9 +141,7 @@ public class SimilarQuestionService {
             float[] embedding
     ) {
         StringBuilder builder =
-                new StringBuilder(
-                        "["
-                );
+                new StringBuilder("[");
 
         for (int index = 0;
              index < embedding.length;
@@ -153,9 +151,7 @@ public class SimilarQuestionService {
                 builder.append(',');
             }
 
-            builder.append(
-                    embedding[index]
-            );
+            builder.append(embedding[index]);
         }
 
         builder.append(']');

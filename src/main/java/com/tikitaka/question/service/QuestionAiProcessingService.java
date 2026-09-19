@@ -37,18 +37,14 @@ public class QuestionAiProcessingService {
     private final ClusterAiClient clusterAiClient;
 
     private final QuestionRepository questionRepository;
-    private final QuestionCategoryRepository
-            questionCategoryRepository;
-    private final QuestionCategoryMappingRepository
-            questionCategoryMappingRepository;
-    private final QuestionClusterRepository
-            questionClusterRepository;
+    private final QuestionCategoryRepository questionCategoryRepository;
+    private final QuestionCategoryMappingRepository questionCategoryMappingRepository;
+    private final QuestionClusterRepository questionClusterRepository;
 
-    private final QuestionClusterService
-            questionClusterService;
+    private final QuestionClusterService questionClusterService;
+    private final QuestionAiContextService questionAiContextService;
 
-    private final TransactionTemplate
-            transactionTemplate;
+    private final TransactionTemplate transactionTemplate;
 
     public void process(
             UUID questionId,
@@ -56,27 +52,27 @@ public class QuestionAiProcessingService {
             String documentContext
     ) {
         AnalysisContext context =
-                markProcessingAndLoadContext(
-                        questionId
-                );
+                markProcessingAndLoadContext(questionId);
 
         try {
-            QuestionAnalyzeResponse response =
-                    analyze(
+            ResolvedContext resolvedContext =
+                    resolveContext(
                             context,
                             slideContext,
                             documentContext
                     );
 
-            if (response.isOther()) {
-                transactionTemplate
-                        .executeWithoutResult(
-                                status ->
-                                        applyOtherResult(
-                                                questionId
-                                        )
-                        );
+            QuestionAnalyzeResponse response =
+                    analyze(
+                            context,
+                            resolvedContext.slideContext(),
+                            resolvedContext.documentContext()
+                    );
 
+            if (response.isOther()) {
+                transactionTemplate.executeWithoutResult(status ->
+                        applyOtherResult(questionId)
+                );
                 return;
             }
 
@@ -84,128 +80,99 @@ public class QuestionAiProcessingService {
                     questionClusterService
                             .findMatchingCluster(
                                     context.documentId(),
-                                    response
-                                            .primaryCategoryId(),
+                                    response.primaryCategoryId(),
                                     response.embedding()
                             )
-                            .map(
-                                    QuestionCluster::getId
-                            );
+                            .map(QuestionCluster::getId);
 
             if (existingClusterId.isPresent()) {
-                UUID clusterId =
-                        existingClusterId.get();
+                UUID clusterId = existingClusterId.get();
 
-                transactionTemplate
-                        .executeWithoutResult(
-                                status ->
-                                        applyCourseRelatedResult(
-                                                questionId,
-                                                response,
-                                                clusterId,
-                                                null
-                                        )
-                        );
-
+                transactionTemplate.executeWithoutResult(status ->
+                        applyCourseRelatedResult(
+                                questionId,
+                                response,
+                                clusterId,
+                                null
+                        )
+                );
                 return;
             }
 
             String categoryName =
                     findCategoryName(
-                            context
-                                    .categoryCandidates(),
-                            response
-                                    .primaryCategoryId()
+                            context.categoryCandidates(),
+                            response.primaryCategoryId()
                     );
 
-            ClusterTitleResponse
-                    titleResponse =
-                    clusterAiClient
-                            .generateTitle(
-                                    new ClusterTitleRequest(
-                                            context.title(),
-                                            context.content(),
-                                            categoryName
-                                    )
-                            );
-
-            transactionTemplate
-                    .executeWithoutResult(
-                            status ->
-                                    applyCourseRelatedResult(
-                                            questionId,
-                                            response,
-                                            null,
-                                            titleResponse
-                                                    .summaryTitle()
-                                    )
+            ClusterTitleResponse titleResponse =
+                    clusterAiClient.generateTitle(
+                            new ClusterTitleRequest(
+                                    context.title(),
+                                    context.content(),
+                                    categoryName
+                            )
                     );
 
-        } catch (Exception exception) {
-
-            markFailed(
-                    questionId
+            transactionTemplate.executeWithoutResult(status ->
+                    applyCourseRelatedResult(
+                            questionId,
+                            response,
+                            null,
+                            titleResponse.summaryTitle()
+                    )
             );
 
+        } catch (Exception exception) {
+            markFailed(questionId);
             throw exception;
         }
     }
 
-    private AnalysisContext
-    markProcessingAndLoadContext(
+    private AnalysisContext markProcessingAndLoadContext(
             UUID questionId
     ) {
         AnalysisContext context =
-                transactionTemplate.execute(
-                        status -> {
-
-                            Question question =
-                                    questionRepository
-                                            .findById(
-                                                    questionId
+                transactionTemplate.execute(status -> {
+                    Question question =
+                            questionRepository.findById(questionId)
+                                    .orElseThrow(() ->
+                                            new IllegalArgumentException(
+                                                    "Question not found: "
+                                                            + questionId
                                             )
-                                            .orElseThrow(
-                                                    () ->
-                                                            new IllegalArgumentException(
-                                                                    "Question not found: "
-                                                                            + questionId
-                                                            )
-                                            );
+                                    );
 
-                            question
-                                    .startAiProcessing();
+                    question.startAiProcessing();
 
-                            List<QuestionAnalyzeRequest.CategoryCandidate>
-                                    candidates =
-                                    questionCategoryRepository
-                                            .findAllByDocumentIdAndDeletedFalse(
-                                                    question
-                                                            .getDocument()
-                                                            .getId()
+                    List<QuestionAnalyzeRequest.CategoryCandidate> candidates =
+                            questionCategoryRepository
+                                    .findAllByDocumentIdAndDeletedFalse(
+                                            question.getDocument().getId()
+                                    )
+                                    .stream()
+                                    .map(category ->
+                                            new QuestionAnalyzeRequest.CategoryCandidate(
+                                                    category.getId(),
+                                                    category.getName()
                                             )
-                                            .stream()
-                                            .map(
-                                                    category ->
-                                                            new QuestionAnalyzeRequest.CategoryCandidate(
-                                                                    category
-                                                                            .getId(),
-                                                                    category
-                                                                            .getName()
-                                                            )
-                                            )
-                                            .toList();
+                                    )
+                                    .toList();
 
-                            return new AnalysisContext(
-                                    question.getId(),
-                                    question
-                                            .getDocument()
-                                            .getId(),
-                                    question.getTitle(),
-                                    question.getContent(),
-                                    candidates
-                            );
-                        }
-                );
+                    UUID slideId =
+                            question.getSlide() == null
+                                    ? null
+                                    : question.getSlide().getId();
+
+                    return new AnalysisContext(
+                            question.getId(),
+                            question.getDocument().getId(),
+                            slideId,
+                            question.getTitle(),
+                            question.getContent(),
+                            candidates
+                    );
+                });
 
         if (context == null) {
             throw new IllegalStateException(
@@ -214,6 +181,41 @@ public class QuestionAiProcessingService {
         }
 
         return context;
+    }
+
+    private ResolvedContext resolveContext(
+            AnalysisContext context,
+            String slideContext,
+            String documentContext
+    ) {
+        boolean needsSlideContext =
+                context.slideId() != null
+                        && isBlank(slideContext);
+
+        boolean needsDocumentContext =
+                isBlank(documentContext);
+
+        if (!needsSlideContext && !needsDocumentContext) {
+            return new ResolvedContext(
+                    normalizeNullable(slideContext),
+                    normalizeNullable(documentContext)
+            );
+        }
+
+        QuestionAiContextService.Context loaded =
+                questionAiContextService.load(
+                        context.documentId(),
+                        context.slideId()
+                );
+
+        return new ResolvedContext(
+                needsSlideContext
+                        ? loaded.slideContext()
+                        : normalizeNullable(slideContext),
+                needsDocumentContext
+                        ? loaded.documentContext()
+                        : normalizeNullable(documentContext)
+        );
     }
 
     public QuestionAnalyzeResponse analyze(
@@ -232,14 +234,9 @@ public class QuestionAiProcessingService {
                 );
 
         QuestionAnalyzeResponse response =
-                questionAiClient
-                        .analyzeQuestion(
-                                request
-                        );
+                questionAiClient.analyzeQuestion(request);
 
-        validateResponse(
-                response
-        );
+        validateResponse(response);
 
         return response;
     }
@@ -247,18 +244,12 @@ public class QuestionAiProcessingService {
     private void applyOtherResult(
             UUID questionId
     ) {
-        Question question =
-                getQuestion(
-                        questionId
-                );
+        Question question = getQuestion(questionId);
 
         questionCategoryMappingRepository
-                .deleteAllByQuestionId(
-                        questionId
-                );
+                .deleteAllByQuestionId(questionId);
 
-        question
-                .completeOtherProcessing();
+        question.completeOtherProcessing();
     }
 
     private void applyCourseRelatedResult(
@@ -267,97 +258,98 @@ public class QuestionAiProcessingService {
             UUID existingClusterId,
             String newClusterTitle
     ) {
-        Question question =
-                getQuestion(
-                        questionId
-                );
+        Question question = getQuestion(questionId);
 
         QuestionCategory primaryCategory =
-                getPrimaryCategory(
-                        question,
-                        response
-                                .primaryCategoryId()
-                );
+                existingClusterId == null
+                        ? getPrimaryCategoryForUpdate(
+                                question,
+                                response.primaryCategoryId()
+                        )
+                        : getPrimaryCategory(
+                                question,
+                                response.primaryCategoryId()
+                        );
 
-        List<QuestionCategory>
-                selectedCategories =
+        List<QuestionCategory> selectedCategories =
                 getSelectedCategories(
                         question,
                         response.categories()
                 );
 
         questionCategoryMappingRepository
-                .deleteAllByQuestionId(
-                        questionId
-                );
+                .deleteAllByQuestionId(questionId);
 
         saveCategoryMappings(
                 question,
                 selectedCategories
         );
 
-        question
-                .completeCourseRelatedProcessing(
-                        primaryCategory,
+        question.completeCourseRelatedProcessing(
+                primaryCategory,
+                response.embedding()
+        );
+
+        if (existingClusterId != null) {
+            QuestionCluster cluster =
+                    getClusterForUpdate(existingClusterId);
+
+            questionClusterService.assignToExistingCluster(
+                    cluster,
+                    question,
+                    response.embedding()
+            );
+            return;
+        }
+
+        // 신규 Cluster 제목을 생성하는 동안 다른 요청이 동일 Category에
+        // Cluster를 먼저 만들었을 수 있다. Category row lock을 획득한 상태에서
+        // 다시 검색하여 중복 Cluster 생성을 방지한다.
+        Optional<QuestionCluster> recheckedCluster =
+                questionClusterService.findMatchingCluster(
+                        question.getDocument().getId(),
+                        primaryCategory.getId(),
                         response.embedding()
                 );
 
-        if (existingClusterId != null) {
-
+        if (recheckedCluster.isPresent()) {
             QuestionCluster cluster =
-                    questionClusterRepository
-                            .findById(
-                                    existingClusterId
-                            )
-                            .orElseThrow(
-                                    () ->
-                                            new IllegalStateException(
-                                                    "Question cluster not found: "
-                                                            + existingClusterId
-                                            )
-                            );
-
-            questionClusterService
-                    .assignToExistingCluster(
-                            cluster,
-                            question,
-                            response.embedding()
+                    getClusterForUpdate(
+                            recheckedCluster.get().getId()
                     );
 
+            questionClusterService.assignToExistingCluster(
+                    cluster,
+                    question,
+                    response.embedding()
+            );
             return;
         }
 
         if (newClusterTitle == null
                 || newClusterTitle.isBlank()) {
-
             throw new IllegalStateException(
                     "New cluster title must not be empty."
             );
         }
 
-        questionClusterService
-                .createNewCluster(
-                        question.getDocument(),
-                        primaryCategory,
-                        question,
-                        newClusterTitle,
-                        response.embedding()
-                );
+        questionClusterService.createNewCluster(
+                question.getDocument(),
+                primaryCategory,
+                question,
+                newClusterTitle,
+                response.embedding()
+        );
     }
 
     private Question getQuestion(
             UUID questionId
     ) {
-        return questionRepository
-                .findById(
-                        questionId
-                )
-                .orElseThrow(
-                        () ->
-                                new IllegalArgumentException(
-                                        "Question not found: "
-                                                + questionId
-                                )
+        return questionRepository.findById(questionId)
+                .orElseThrow(() ->
+                        new IllegalArgumentException(
+                                "Question not found: " + questionId
+                        )
                 );
     }
 
@@ -366,60 +358,68 @@ public class QuestionAiProcessingService {
             UUID primaryCategoryId
     ) {
         QuestionCategory category =
-                questionCategoryRepository
-                        .findById(
-                                primaryCategoryId
-                        )
-                        .orElseThrow(
-                                () ->
-                                        new IllegalStateException(
-                                                "Primary category not found: "
-                                                        + primaryCategoryId
-                                        )
+                questionCategoryRepository.findById(primaryCategoryId)
+                        .orElseThrow(() ->
+                                new IllegalStateException(
+                                        "Primary category not found: "
+                                                + primaryCategoryId
+                                )
                         );
 
-        validateSameDocument(
-                question,
-                category
-        );
-
+        validateUsableCategory(question, category);
         return category;
     }
 
-    private List<QuestionCategory>
-    getSelectedCategories(
+    private QuestionCategory getPrimaryCategoryForUpdate(
             Question question,
-            List<QuestionCategoryResult>
-                    categoryResults
+            UUID primaryCategoryId
     ) {
-        List<QuestionCategory> categories =
-                new ArrayList<>();
+        QuestionCategory category =
+                questionCategoryRepository
+                        .findQuestionCategoryById(primaryCategoryId)
+                        .orElseThrow(() ->
+                                new IllegalStateException(
+                                        "Primary category not found: "
+                                                + primaryCategoryId
+                                )
+                        );
 
-        for (QuestionCategoryResult result
-                : categoryResults) {
+        validateUsableCategory(question, category);
+        return category;
+    }
 
+    private QuestionCluster getClusterForUpdate(
+            UUID clusterId
+    ) {
+        return questionClusterRepository
+                .findQuestionClusterById(clusterId)
+                .orElseThrow(() ->
+                        new IllegalStateException(
+                                "Question cluster not found: "
+                                        + clusterId
+                        )
+                );
+    }
+
+    private List<QuestionCategory> getSelectedCategories(
+            Question question,
+            List<QuestionCategoryResult> categoryResults
+    ) {
+        List<QuestionCategory> categories = new ArrayList<>();
+
+        for (QuestionCategoryResult result : categoryResults) {
             QuestionCategory category =
                     questionCategoryRepository
-                            .findById(
-                                    result.categoryId()
-                            )
-                            .orElseThrow(
-                                    () ->
-                                            new IllegalStateException(
-                                                    "Category not found: "
-                                                            + result
-                                                            .categoryId()
-                                            )
+                            .findById(result.categoryId())
+                            .orElseThrow(() ->
+                                    new IllegalStateException(
+                                            "Category not found: "
+                                                    + result.categoryId()
+                                    )
                             );
 
-            validateSameDocument(
-                    question,
-                    category
-            );
-
-            categories.add(
-                    category
-            );
+            validateUsableCategory(question, category);
+            categories.add(category);
         }
 
         return categories;
@@ -431,63 +431,56 @@ public class QuestionAiProcessingService {
     ) {
         List<QuestionCategoryMapping> mappings =
                 categories.stream()
-                        .map(
-                                category ->
-                                        QuestionCategoryMapping
-                                                .create(
-                                                        question,
-                                                        category
-                                                )
+                        .map(category ->
+                                QuestionCategoryMapping.create(
+                                        question,
+                                        category
+                                )
                         )
                         .toList();
 
-        questionCategoryMappingRepository
-                .saveAll(
-                        mappings
-                );
+        questionCategoryMappingRepository.saveAll(mappings);
     }
 
     private String findCategoryName(
-            List<QuestionAnalyzeRequest.CategoryCandidate>
-                    candidates,
+            List<QuestionAnalyzeRequest.CategoryCandidate> candidates,
             UUID categoryId
     ) {
         return candidates.stream()
-                .filter(
-                        candidate ->
-                                candidate
-                                        .categoryId()
-                                        .equals(
-                                                categoryId
-                                        )
+                .filter(candidate ->
+                        candidate.categoryId().equals(categoryId)
                 )
-                .map(
-                        QuestionAnalyzeRequest
-                                .CategoryCandidate::name
-                )
+                .map(QuestionAnalyzeRequest.CategoryCandidate::name)
                 .findFirst()
-                .orElseThrow(
-                        () ->
-                                new IllegalStateException(
-                                        "Primary category does not exist in analysis context: "
-                                                + categoryId
-                                )
+                .orElseThrow(() ->
+                        new IllegalStateException(
+                                "Primary category does not exist in analysis context: "
+                                        + categoryId
+                        )
                 );
+    }
+
+    private void validateUsableCategory(
+            Question question,
+            QuestionCategory category
+    ) {
+        validateSameDocument(question, category);
+
+        if (category.isDeleted()) {
+            throw new IllegalStateException(
+                    "Deleted category cannot be used for question AI processing: "
+                            + category.getId()
+            );
+        }
     }
 
     private void validateSameDocument(
             Question question,
             QuestionCategory category
     ) {
-        if (!question
-                .getDocument()
+        if (!question.getDocument()
                 .getId()
-                .equals(
-                        category
-                                .getDocument()
-                                .getId()
-                )) {
-
+                .equals(category.getDocument().getId())) {
             throw new IllegalStateException(
                     "Question and category must belong to the same document."
             );
@@ -509,23 +502,13 @@ public class QuestionAiProcessingService {
             );
         }
 
-        if (response.relation()
-                == QuestionScope.OTHER) {
-
-            validateOtherResponse(
-                    response
-            );
-
+        if (response.relation() == QuestionScope.OTHER) {
+            validateOtherResponse(response);
             return;
         }
 
-        if (response.relation()
-                == QuestionScope.COURSE_RELATED) {
-
-            validateCourseRelatedResponse(
-                    response
-            );
-
+        if (response.relation() == QuestionScope.COURSE_RELATED) {
+            validateCourseRelatedResponse(response);
             return;
         }
 
@@ -538,27 +521,20 @@ public class QuestionAiProcessingService {
     private void validateOtherResponse(
             QuestionAnalyzeResponse response
     ) {
-        if (response
-                .primaryCategoryId()
-                != null) {
-
+        if (response.primaryCategoryId() != null) {
             throw new IllegalStateException(
                     "OTHER question must not have primary category."
             );
         }
 
         if (response.embedding() != null) {
-
             throw new IllegalStateException(
                     "OTHER question must not have embedding."
             );
         }
 
         if (response.categories() != null
-                && !response
-                .categories()
-                .isEmpty()) {
-
+                && !response.categories().isEmpty()) {
             throw new IllegalStateException(
                     "OTHER question must not have categories."
             );
@@ -568,21 +544,14 @@ public class QuestionAiProcessingService {
     private void validateCourseRelatedResponse(
             QuestionAnalyzeResponse response
     ) {
-        if (response
-                .primaryCategoryId()
-                == null) {
-
+        if (response.primaryCategoryId() == null) {
             throw new IllegalStateException(
                     "COURSE_RELATED question must have primary category."
             );
         }
 
         if (response.embedding() == null
-                || response
-                .embedding()
-                .length
-                != EMBEDDING_DIMENSION) {
-
+                || response.embedding().length != EMBEDDING_DIMENSION) {
             throw new IllegalStateException(
                     "COURSE_RELATED embedding dimension must be "
                             + EMBEDDING_DIMENSION
@@ -591,31 +560,23 @@ public class QuestionAiProcessingService {
         }
 
         if (response.categories() == null
-                || response
-                .categories()
-                .isEmpty()) {
-
+                || response.categories().isEmpty()) {
             throw new IllegalStateException(
                     "COURSE_RELATED question must have categories."
             );
         }
 
         boolean primaryCategoryIncluded =
-                response
-                        .categories()
+                response.categories()
                         .stream()
-                        .anyMatch(
-                                category ->
-                                        category
-                                                .categoryId()
-                                                .equals(
-                                                        response
-                                                                .primaryCategoryId()
-                                                )
+                        .anyMatch(category ->
+                                category.categoryId()
+                                        .equals(
+                                                response.primaryCategoryId()
+                                        )
                         );
 
         if (!primaryCategoryIncluded) {
-
             throw new IllegalStateException(
                     "Primary category must exist in categories."
             );
@@ -625,41 +586,48 @@ public class QuestionAiProcessingService {
     private void markFailed(
             UUID questionId
     ) {
-        transactionTemplate
-                .executeWithoutResult(
-                        status -> {
+        transactionTemplate.executeWithoutResult(status -> {
+            Question question =
+                    questionRepository.findById(questionId)
+                            .orElse(null);
 
-                            Question question =
-                                    questionRepository
-                                            .findById(
-                                                    questionId
-                                            )
-                                            .orElse(
-                                                    null
-                                            );
+            if (question == null) {
+                return;
+            }
 
-                            if (question == null) {
-                                return;
-                            }
+            // 실패 직전의 AI 결과 저장 Transaction은 rollback 되므로
+            // 여기서 기존 Category Mapping을 삭제하면 안 된다.
+            question.failAiProcessing();
+        });
+    }
 
-                            questionCategoryMappingRepository
-                                    .deleteAllByQuestionId(
-                                            questionId
-                                    );
+    private boolean isBlank(
+            String value
+    ) {
+        return value == null || value.isBlank();
+    }
 
-                            question
-                                    .failAiProcessing();
-                        }
-                );
+    private String normalizeNullable(
+            String value
+    ) {
+        return isBlank(value)
+                ? null
+                : value.trim();
     }
 
     public record AnalysisContext(
             UUID questionId,
             UUID documentId,
+            UUID slideId,
             String title,
             String content,
-            List<QuestionAnalyzeRequest.CategoryCandidate>
-                    categoryCandidates
+            List<QuestionAnalyzeRequest.CategoryCandidate> categoryCandidates
+    ) {
+    }
+
+    private record ResolvedContext(
+            String slideContext,
+            String documentContext
     ) {
     }
 }

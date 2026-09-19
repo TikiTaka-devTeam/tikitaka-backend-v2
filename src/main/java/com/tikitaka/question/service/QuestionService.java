@@ -488,6 +488,7 @@ public class QuestionService {
                 similarQuestionService
                         .findSimilarQuestions(
                                 request.documentId(),
+                                request.slideId(),
                                 request.title(),
                                 request.content()
                         )
