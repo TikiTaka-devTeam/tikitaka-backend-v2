@@ -49,12 +49,12 @@ public class DocumentRevisionCompletionWorker {
     private final DocumentAiProcessingService documentAiProcessingService;
 
     @Async
-    public void completeAsync(UUID revisionId) {
+    public void completeAsync(UUID revisionId, String title) {
         List<String> uploadedKeys = new ArrayList<>();
 
         try {
             transactionTemplate.executeWithoutResult(
-                    status -> complete(revisionId, uploadedKeys)
+                    status -> complete(revisionId, title, uploadedKeys)
             );
 
         } catch (RuntimeException exception) {
@@ -74,6 +74,7 @@ public class DocumentRevisionCompletionWorker {
 
     private void complete(
             UUID revisionId,
+            String title,
             List<String> uploadedKeys
     ) {
         DocumentRevision revision =
@@ -139,7 +140,7 @@ public class DocumentRevisionCompletionWorker {
                 root
                         + "/"
                         + S3ObjectNames.imageFilename(
-                                document.getTitle(),
+                                title,
                                 "썸네일",
                                 ".png"
                         );
@@ -176,7 +177,7 @@ public class DocumentRevisionCompletionWorker {
                         root
                                 + "/slides/"
                                 + S3ObjectNames.imageFilename(
-                                        document.getTitle(),
+                                        title,
                                         "슬라이드_" + (outputIndex + 1),
                                         ".png"
                                 );
@@ -262,6 +263,7 @@ public class DocumentRevisionCompletionWorker {
         slideRepository.saveAll(insertedSlides);
 
         document.replace(
+                title,
                 documentThumbnailKey,
                 pdfKey,
                 processed.pageCount()
