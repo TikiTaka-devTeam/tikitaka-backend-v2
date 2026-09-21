@@ -155,7 +155,7 @@ public class QuestionService {
 
         return new ListResponse(
                 page.stream()
-                        .map(this::listItem)
+                        .map(question -> listItem(question, user))
                         .toList(),
                 filtered.size(),
                 hasNext
@@ -505,6 +505,10 @@ public class QuestionService {
                                     categoryInfo(question),
                                     question.getStatus(),
                                     question.getLikeCount(),
+                                    likes.existsByQuestionIdAndUserId(
+                                            question.getId(),
+                                            user.getId()
+                                    ),
                                     result.similarity()
                             );
                         })
@@ -1135,7 +1139,8 @@ public class QuestionService {
     }
 
     private ListItem listItem(
-            Question question
+            Question question,
+            User user
     ) {
         return new ListItem(
                 question.getId(),
@@ -1146,6 +1151,10 @@ public class QuestionService {
                 question.getCreatedAt(),
                 question.getViewCount(),
                 question.getLikeCount(),
+                likes.existsByQuestionIdAndUserId(
+                        question.getId(),
+                        user.getId()
+                ),
                 question.getStatus()
         );
     }
