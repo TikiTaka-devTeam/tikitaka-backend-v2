@@ -40,6 +40,7 @@ import com.tikitaka.question.repository.QuestionCategoryRepository;
 import com.tikitaka.question.repository.QuestionCommentRepository;
 import com.tikitaka.question.repository.QuestionLikeRepository;
 import com.tikitaka.question.repository.QuestionRepository;
+import com.tikitaka.search.repository.RecentQuestionViewRepository;
 import com.tikitaka.space.entity.PermissionType;
 import com.tikitaka.space.entity.SpaceMember;
 import com.tikitaka.space.entity.SpaceMemberRole;
@@ -64,6 +65,7 @@ public class QuestionService {
     private final AnswerRepository answers;
     private final QuestionCommentRepository comments;
     private final QuestionLikeRepository likes;
+    private final RecentQuestionViewRepository recentQuestionViews;
     private final QuestionCategoryRepository categories;
     private final QuestionCategoryMappingRepository mappings;
     private final DocumentRepository documents;
@@ -153,7 +155,7 @@ public class QuestionService {
 
         return new ListResponse(
                 page.stream()
-                        .map(this::listItem)
+                        .map(question -> listItem(question, user))
                         .toList(),
                 filtered.size(),
                 hasNext
@@ -296,7 +298,23 @@ public class QuestionService {
                 user
         );
 
-        question.increaseViewCount();
+        boolean firstView = recentQuestionViews.insertIfAbsent(
+                user.getId(),
+                question.getId()
+        ) == 1;
+
+        int viewCount = question.getViewCount();
+        if (firstView) {
+            if (questions.increaseViewCount(question.getId()) == 0) {
+                fail(QuestionErrorCode.QUESTION_NOT_FOUND);
+            }
+            viewCount++;
+        } else {
+            recentQuestionViews.refreshViewedAt(
+                    user.getId(),
+                    question.getId()
+            );
+        }
 
         return new Detail(
                 question.getId(),
@@ -307,7 +325,7 @@ public class QuestionService {
                 categoryInfo(question),
                 question.getXRatio(),
                 question.getYRatio(),
-                question.getViewCount(),
+                viewCount,
                 question.getLikeCount(),
                 likes.existsByQuestionIdAndUserId(
                         id,
@@ -487,6 +505,10 @@ public class QuestionService {
                                     categoryInfo(question),
                                     question.getStatus(),
                                     question.getLikeCount(),
+                                    likes.existsByQuestionIdAndUserId(
+                                            question.getId(),
+                                            user.getId()
+                                    ),
                                     result.similarity()
                             );
                         })
@@ -1117,7 +1139,8 @@ public class QuestionService {
     }
 
     private ListItem listItem(
-            Question question
+            Question question,
+            User user
     ) {
         return new ListItem(
                 question.getId(),
@@ -1128,6 +1151,10 @@ public class QuestionService {
                 question.getCreatedAt(),
                 question.getViewCount(),
                 question.getLikeCount(),
+                likes.existsByQuestionIdAndUserId(
+                        question.getId(),
+                        user.getId()
+                ),
                 question.getStatus()
         );
     }

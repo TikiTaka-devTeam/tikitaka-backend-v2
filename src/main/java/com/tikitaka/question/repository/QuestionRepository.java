@@ -6,6 +6,7 @@ import java.util.UUID;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -63,6 +64,19 @@ public interface QuestionRepository
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     Optional<Question> findQuestionById(
             UUID id
+    );
+
+    @Modifying
+    @Query(
+            value = """
+                    UPDATE questions
+                    SET view_count = view_count + 1
+                    WHERE id = :questionId AND is_deleted = FALSE
+                    """,
+            nativeQuery = true
+    )
+    int increaseViewCount(
+            @Param("questionId") UUID questionId
     );
 
     @Query(

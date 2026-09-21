@@ -8,7 +8,7 @@ public final class QuestionResponse { private QuestionResponse() {}
  public record AuthorInfo(@JsonProperty("user_id") UUID userId, String name, @JsonProperty("profile_url") String profileUrl) {}
  public record ListItem(@JsonProperty("question_id") UUID questionId, String title, DocumentInfo document, SlideInfo slide,
    List<CategoryInfo> categories, @JsonProperty("created_at") Instant createdAt, @JsonProperty("view_count") Integer viewCount,
-   @JsonProperty("like_count") Integer likeCount, QuestionStatus status) {}
+   @JsonProperty("like_count") Integer likeCount, boolean liked, QuestionStatus status) {}
  public record ListResponse(List<ListItem> questions, @JsonProperty("total_count") long totalCount,
    @JsonProperty("next_cursor") String nextCursor, @JsonProperty("has_next") boolean hasNext) {}
  public record Summary(@JsonProperty("total_count") long totalCount, @JsonProperty("answered_count") long answeredCount, @JsonProperty("pending_count") long pendingCount) {}
@@ -28,7 +28,7 @@ public final class QuestionResponse { private QuestionResponse() {}
  public record SpaceCreate(@JsonProperty("question_id") UUID questionId, DocumentInfo document, SlideInfo slide, String title, String content,
    List<CategoryInfo> categories, QuestionStatus status, @JsonProperty("created_at") Instant createdAt) {}
  public record SimilarItem(@JsonProperty("question_id") UUID questionId, String title, String content, List<CategoryInfo> categories,
-   QuestionStatus status, @JsonProperty("like_count") Integer likeCount, double similarity) {}
+   QuestionStatus status, @JsonProperty("like_count") Integer likeCount, boolean liked, double similarity) {}
  public record SimilarResponse(@JsonProperty("question_id") UUID questionId, @JsonProperty("similar_questions") List<SimilarItem> similarQuestions) {}
  public record Delete(@JsonProperty("question_id") UUID questionId, @JsonProperty("is_deleted") boolean deleted, @JsonProperty("deleted_at") Instant deletedAt) {}
  public record AnswerMutation(@JsonProperty("answer_id") UUID answerId, @JsonProperty("question_id") UUID questionId, String content,
