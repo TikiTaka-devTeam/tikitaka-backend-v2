@@ -21,6 +21,7 @@ import com.tikitaka.document.dto.response.RevisionPageResponse;
 import com.tikitaka.document.dto.response.RevisionSourceSlideResponse;
 import com.tikitaka.document.dto.response.SourcePdfUploadResponse;
 import com.tikitaka.document.dto.request.RevisionOperationRequest;
+import com.tikitaka.document.dto.request.DocumentRevisionCompleteRequest;
 import com.tikitaka.document.dto.request.RevisionPreviewVersionRequest;
 import com.tikitaka.document.dto.response.RevisionOperationResponse;
 import com.tikitaka.document.dto.response.RevisionUndoRedoResponse;
@@ -208,15 +209,18 @@ public class DocumentRevisionService {
     }
 
     @Transactional
-    public DocumentRevisionCompleteResponse complete(UUID documentId, UUID revisionId, RevisionPreviewVersionRequest request, User user) {
+    public DocumentRevisionCompleteResponse complete(UUID documentId, UUID revisionId, DocumentRevisionCompleteRequest request, User user) {
         DocumentRevision revision = lockedEditableRevision(documentId, revisionId, user);
         validatePreviewVersion(revision, request.basePreviewVersion());
         if (!revision.getBaseDocumentVersion().equals(revision.getDocument().getVersion())) {
             throw new BusinessException(DocumentErrorCode.DOCUMENT_VERSION_CONFLICT);
         }
+        String title = request.title() == null
+                ? revision.getDocument().getTitle()
+                : normalizeTitle(request.title());
         revision.startProcessing();
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override public void afterCommit() { completionWorker.completeAsync(revision.getId()); }
+            @Override public void afterCommit() { completionWorker.completeAsync(revision.getId(), title); }
         });
         return DocumentRevisionCompleteResponse.processing(revision);
     }
@@ -290,6 +294,13 @@ public class DocumentRevisionService {
     @SuppressWarnings("unchecked") private List<RevisionPage> pages(RevisionOperation o) { List<String> ids = (List<String>) o.getPayload().get("page_ids"); return revisionPageRepository.findAllById(ids.stream().map(UUID::fromString).toList()); }
     private void discardRedo(DocumentRevision r) { int c = r.getOperationCursorSequence() == null ? 0 : r.getOperationCursorSequence(); revisionOperationRepository.findAllByRevisionIdAndStateAndSequenceGreaterThanOrderBySequenceAsc(r.getId(), RevisionOperationState.UNDONE, c).forEach(RevisionOperation::discard); }
     private void validatePreviewVersion(DocumentRevision r, Integer v) { if (v == null || !v.equals(r.getPreviewVersion())) throw new BusinessException(DocumentErrorCode.REVISION_NOT_EDITABLE); }
+    private String normalizeTitle(String title) {
+        String normalized = title.trim();
+        if (normalized.isEmpty() || normalized.length() > 255) {
+            throw new BusinessException(DocumentErrorCode.INVALID_DOCUMENT_TITLE);
+        }
+        return normalized;
+    }
     private RevisionOperationResponse operationResponse(DocumentRevision r, RevisionOperation o) { return new RevisionOperationResponse(o.getId(), o.getSequence(), r.getPreviewVersion(), r.getOperationCursorSequence() != null, revisionOperationRepository.findAllByRevisionIdOrderBySequenceAsc(r.getId()).stream().anyMatch(x -> x.getState() == RevisionOperationState.UNDONE)); }
     private RevisionUndoRedoResponse undoRedoResponse(DocumentRevision r, RevisionOperation o) { RevisionOperationResponse x = operationResponse(r, o); return new RevisionUndoRedoResponse(r.getId(), o.getId(), x.previewVersion(), x.canUndo(), x.canRedo()); }
     private DocumentRevision lockedEditableRevision(UUID d, UUID r, User u) { DocumentRevision x = revisionRepository.findByIdForUpdate(r).orElseThrow(() -> new BusinessException(DocumentErrorCode.REVISION_NOT_FOUND)); verifyDocument(x, d); if (!x.getEditor().getId().equals(u.getId())) throw new BusinessException(DocumentErrorCode.REVISION_ACCESS_DENIED); if (x.getStatus() != RevisionStatus.EDITING) throw new BusinessException(DocumentErrorCode.REVISION_NOT_EDITABLE); return x; }

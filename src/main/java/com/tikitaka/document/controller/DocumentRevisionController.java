@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.tikitaka.document.dto.request.RevisionOperationRequest;
+import com.tikitaka.document.dto.request.DocumentRevisionCompleteRequest;
 import com.tikitaka.document.dto.request.RevisionPreviewVersionRequest;
 import com.tikitaka.document.dto.response.DocumentRevisionCancelResponse;
 import com.tikitaka.document.dto.response.DocumentRevisionCompleteResponse;
@@ -87,7 +88,7 @@ public class DocumentRevisionController {
     @PostMapping("/api/v1/documents/{documentId}/revisions/{revisionId}/complete")
     @ResponseStatus(HttpStatus.ACCEPTED)
     public DocumentRevisionCompleteResponse completeRevision(@PathVariable UUID documentId, @PathVariable UUID revisionId,
-            @RequestBody RevisionPreviewVersionRequest request, Authentication authentication) {
+            @RequestBody DocumentRevisionCompleteRequest request, Authentication authentication) {
         return documentRevisionService.complete(documentId, revisionId, request, currentUserResolver.resolve(authentication));
     }
 

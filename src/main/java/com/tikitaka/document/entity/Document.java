@@ -105,10 +105,12 @@ public class Document extends BaseTimeEntity {
     }
 
     public void replace(
+            String title,
             String thumbnailKey,
             String pdfKey,
             Integer pageCount
     ) {
+        this.title = title;
         this.thumbnailKey = thumbnailKey;
         this.pdfKey = pdfKey;
         this.pageCount = pageCount;
