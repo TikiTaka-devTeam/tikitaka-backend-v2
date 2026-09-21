@@ -34,6 +34,7 @@ dependencies {
 	implementation 'org.bouncycastle:bcprov-jdk18on:1.85.2' // Web Push 암호화 Provider
 	implementation 'org.apache.httpcomponents:httpcore:4.4.16' // Web Push 응답 타입
 	implementation 'io.jsonwebtoken:jjwt-api:0.13.0'
+	implementation 'org.hibernate.orm:hibernate-vector' // Hibernate 벡터 타입 지원
 	runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.13.0'
 	runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.13.0'
 	implementation 'org.flywaydb:flyway-database-postgresql' // PostgreSQL용 Flyway 지원

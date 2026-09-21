@@ -1,20 +1,19 @@
 package com.tikitaka.question.service;
 
-import static com.tikitaka.question.dto.response.QuestionResponses.*;
+import static com.tikitaka.question.dto.response.QuestionResponse.*;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Comparator;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Locale;
-import java.util.Set;
 import java.util.UUID;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.tikitaka.document.entity.Document;
 import com.tikitaka.document.entity.Slide;
@@ -23,9 +22,10 @@ import com.tikitaka.document.repository.SlideRepository;
 import com.tikitaka.global.common.cursor.CursorCodec;
 import com.tikitaka.global.exception.BusinessException;
 import com.tikitaka.question.dto.request.CategoryBatchRequest;
+import com.tikitaka.question.dto.request.CategoryCreateRequest;
+import com.tikitaka.question.dto.request.CategoryUpdateRequest;
 import com.tikitaka.question.dto.request.CommentCreateRequest;
 import com.tikitaka.question.dto.request.QuestionCreateRequest;
-import com.tikitaka.question.dto.request.SimilarQuestionRequest;
 import com.tikitaka.question.dto.request.SpaceQuestionCreateRequest;
 import com.tikitaka.question.entity.Answer;
 import com.tikitaka.question.entity.Question;
@@ -40,6 +40,7 @@ import com.tikitaka.question.repository.QuestionCategoryRepository;
 import com.tikitaka.question.repository.QuestionCommentRepository;
 import com.tikitaka.question.repository.QuestionLikeRepository;
 import com.tikitaka.question.repository.QuestionRepository;
+import com.tikitaka.search.repository.RecentQuestionViewRepository;
 import com.tikitaka.space.entity.PermissionType;
 import com.tikitaka.space.entity.SpaceMember;
 import com.tikitaka.space.entity.SpaceMemberRole;
@@ -49,91 +50,1578 @@ import com.tikitaka.space.repository.SpaceMemberRepository;
 import com.tikitaka.user.entity.User;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class QuestionService {
-    private static final int DEFAULT_SIZE=20, MAX_SIZE=100;
-    private final QuestionRepository questions; private final AnswerRepository answers;
-    private final QuestionCommentRepository comments; private final QuestionLikeRepository likes;
-    private final QuestionCategoryRepository categories; private final QuestionCategoryMappingRepository mappings;
-    private final DocumentRepository documents; private final SlideRepository slides;
-    private final SpaceMemberRepository members; private final SpaceMemberPermissionRepository permissions;
+
+    private static final int DEFAULT_SIZE = 20;
+    private static final int MAX_SIZE = 100;
+
+    private final QuestionRepository questions;
+    private final AnswerRepository answers;
+    private final QuestionCommentRepository comments;
+    private final QuestionLikeRepository likes;
+    private final RecentQuestionViewRepository recentQuestionViews;
+    private final QuestionCategoryRepository categories;
+    private final QuestionCategoryMappingRepository mappings;
+    private final DocumentRepository documents;
+    private final SlideRepository slides;
+    private final SpaceMemberRepository members;
+    private final SpaceMemberPermissionRepository permissions;
     private final CursorCodec cursorCodec;
 
-    public enum QuestionSortType { MOST_VIEWED, MOST_POPULAR, LATEST }
-    public enum QuestionScope { ALL, SLIDE }
-    private record OffsetCursor(int offset) {}
+    private final QuestionAiProcessingService questionAiProcessingService;
+    private final SimilarQuestionService similarQuestionService;
+    private final CategoryQuestionRemappingService categoryQuestionRemappingService;
+    private final TransactionTemplate transactionTemplate;
 
-    public ListResponse list(UUID spaceId, QuestionSortType sort, UUID documentId, UUID categoryId, String cursor, int size, User user, boolean mine) {
-        SpaceMember member=requireMember(spaceId,user); if(mine && member.getRole()!=SpaceMemberRole.STUDENT) fail(QuestionErrorCode.STUDENT_ONLY);
-        if(documentId!=null) requireDocument(documentId,spaceId);
-        int pageSize=size(size), offset=offset(cursor);
-        List<Question> filtered=(mine?questions.findAllByDocumentSpaceIdAndStudentIdAndDeletedFalse(spaceId,user.getId()):questions.findAllByDocumentSpaceIdAndDeletedFalse(spaceId)).stream()
-            .filter(q->documentId==null||q.getDocument().getId().equals(documentId))
-            .filter(q->categoryId==null||mappings.findAllByQuestionId(q.getId()).stream().anyMatch(m->m.getCategory().getId().equals(categoryId)&&!m.getCategory().isDeleted()))
-            .sorted(comparator(sort)).toList();
-        List<Question> page=filtered.stream().skip(offset).limit(pageSize).toList(); boolean hasNext=offset+page.size()<filtered.size();
-        return new ListResponse(page.stream().map(this::listItem).toList(), filtered.size(), hasNext?cursorCodec.encode(new OffsetCursor(offset+page.size())):null, hasNext);
+    public enum QuestionSortType {
+        MOST_VIEWED,
+        MOST_POPULAR,
+        LATEST
     }
 
-    public Summary summary(UUID spaceId, User user){ SpaceMember m=requireMember(spaceId,user); if(m.getRole()!=SpaceMemberRole.STUDENT) fail(QuestionErrorCode.STUDENT_ONLY);
-        long total=questions.countByDocumentSpaceIdAndStudentIdAndDeletedFalse(spaceId,user.getId()); long answered=questions.findAllByDocumentSpaceIdAndStudentIdAndDeletedFalse(spaceId,user.getId()).stream().filter(q->q.getStatus()==QuestionStatus.ANSWERED).count(); return new Summary(total,answered,total-answered); }
-
-    public DocumentListResponse documentQuestions(UUID documentId, QuestionScope scope, UUID slideId, String cursor, int size, User user){
-        Document d=getDocument(documentId); requireMember(d.getSpace().getId(),user); if(scope==QuestionScope.SLIDE&&slideId==null) fail(QuestionErrorCode.INVALID_SCOPE);
-        if(slideId!=null){ Slide s=getSlide(slideId); if(!s.getDocument().getId().equals(documentId)) fail(QuestionErrorCode.SLIDE_NOT_FOUND); }
-        List<Question> all=(scope==QuestionScope.SLIDE?questions.findAllBySlideIdAndDeletedFalse(slideId):questions.findAllByDocumentIdAndDeletedFalse(documentId)).stream().sorted(comparator(QuestionSortType.LATEST)).toList();
-        int n=size(size),o=offset(cursor); List<Question> page=all.stream().skip(o).limit(n).toList(); boolean next=o+page.size()<all.size();
-        return new DocumentListResponse(page.stream().map(this::documentItem).toList(), next?cursorCodec.encode(new OffsetCursor(o+page.size())):null,next);
+    public enum QuestionScope {
+        ALL,
+        SLIDE
     }
 
-    @Transactional public Detail detail(UUID id,User user){ Question q=getQuestion(id); requireMember(q.getDocument().getSpace().getId(),user); q.increaseViewCount();
-        return new Detail(q.getId(),q.getTitle(),q.getContent(),doc(q.getDocument()),slide(q.getSlide()),categoryInfo(q),q.getXRatio(),q.getYRatio(),q.getViewCount(),q.getLikeCount(),likes.existsByQuestionIdAndUserId(id,user.getId()),q.getStatus(),
-          answers.findAllByQuestionIdAndDeletedFalseOrderByCreatedAtAsc(id).stream().map(this::answerInfo).toList(),comments.findAllByQuestionIdAndDeletedFalseOrderByCreatedAtAsc(id).stream().map(this::commentInfo).toList()); }
+    private record OffsetCursor(int offset) {
+    }
 
-    @Transactional public Create createPinned(UUID slideId,QuestionCreateRequest r,User user){ validatePin(r.xRatio(),r.yRatio()); Slide s=getSlide(slideId); requireStudent(s.getDocument().getSpace().getId(),user); Question q=questions.save(Question.createWithPin(s.getDocument(),s,user,r.title().trim(),r.content().trim(),r.xRatio(),r.yRatio())); return new Create(q.getId(),q.getDocument().getId(),s.getId(),q.getTitle(),q.getContent(),q.getXRatio(),q.getYRatio(),List.of(),q.getStatus(),q.getCreatedAt()); }
-    @Transactional public SpaceCreate create(UUID spaceId,SpaceQuestionCreateRequest r,User user){ requireStudent(spaceId,user); Document d=requireDocument(r.documentId(),spaceId); Question q=questions.save(Question.create(d,user,r.title().trim(),r.content().trim())); return new SpaceCreate(q.getId(),doc(d),null,q.getTitle(),q.getContent(),List.of(),q.getStatus(),q.getCreatedAt()); }
+    public ListResponse list(
+            UUID spaceId,
+            QuestionSortType sort,
+            UUID documentId,
+            UUID categoryId,
+            String cursor,
+            int size,
+            User user,
+            boolean mine
+    ) {
+        SpaceMember member = requireMember(spaceId, user);
 
-    public SimilarResponse similar(UUID spaceId,SimilarQuestionRequest r,User user){ requireStudent(spaceId,user); requireDocument(r.documentId(),spaceId); if(r.slideId()!=null){Slide s=getSlide(r.slideId());if(!s.getDocument().getId().equals(r.documentId()))fail(QuestionErrorCode.SLIDE_NOT_FOUND);}
-        Set<String> source=tokens(r.title()+" "+r.content()); List<SimilarItem> found=questions.findAllByDocumentIdAndDeletedFalse(r.documentId()).stream().map(q->new SimilarItem(q.getId(),q.getTitle(),q.getContent(),categoryInfo(q),q.getStatus(),q.getLikeCount(),jaccard(source,tokens(q.getTitle()+" "+q.getContent())))).filter(x->x.similarity()>=0.2).sorted(Comparator.comparingDouble(SimilarItem::similarity).reversed()).limit(5).toList(); return new SimilarResponse(found); }
+        if (mine && member.getRole() != SpaceMemberRole.STUDENT) {
+            fail(QuestionErrorCode.STUDENT_ONLY);
+        }
 
-    @Transactional public Delete deleteQuestion(UUID id,User user){ Question q=getQuestion(id); requireProfessor(q.getDocument().getSpace().getId(),user); q.delete(); return new Delete(q.getId(),true,q.getDeletedAt()); }
-    @Transactional public AnswerMutation addAnswer(UUID qid,String content,User user){ Question q=getQuestion(qid); requireManager(q.getDocument().getSpace().getId(),user); Answer a=answers.save(Answer.create(q,user,content.trim())); q.markAnswered(); return new AnswerMutation(a.getId(),qid,a.getContent(),a.getCreatedAt(),a.getUpdatedAt(),null); }
-    @Transactional public AnswerMutation updateAnswer(UUID id,String content,User user){ Answer a=getAnswer(id); if(!a.getAuthor().getId().equals(user.getId()))fail(QuestionErrorCode.AUTHOR_ONLY);a.updateContent(content.trim());return new AnswerMutation(a.getId(),a.getQuestion().getId(),a.getContent(),a.getCreatedAt(),Instant.now(),null);}
-    @Transactional public AnswerMutation deleteAnswer(UUID id,User user){Answer a=getAnswer(id);SpaceMember m=requireMember(a.getQuestion().getDocument().getSpace().getId(),user);if(!a.getAuthor().getId().equals(user.getId())&&m.getRole()!=SpaceMemberRole.PROFESSOR)fail(QuestionErrorCode.AUTHOR_ONLY);a.delete();if(answers.countByQuestionIdAndDeletedFalse(a.getQuestion().getId())==0)a.getQuestion().markPending();return new AnswerMutation(a.getId(),a.getQuestion().getId(),a.getContent(),a.getCreatedAt(),a.getUpdatedAt(),true);}
-    @Transactional public CommentMutation addComment(UUID qid,CommentCreateRequest r,User user){Question q=getQuestion(qid);requireManager(q.getDocument().getSpace().getId(),user);QuestionComment parent=r.parentCommentId()==null?null:getComment(r.parentCommentId());if(parent!=null&&!parent.getQuestion().getId().equals(qid))fail(QuestionErrorCode.COMMENT_NOT_FOUND);QuestionComment c=comments.save(QuestionComment.create(q,user,parent,r.content().trim()));return commentMutation(c,null);}
-    @Transactional public CommentMutation updateComment(UUID id,String content,User user){QuestionComment c=getComment(id);if(!c.getAuthor().getId().equals(user.getId()))fail(QuestionErrorCode.AUTHOR_ONLY);c.updateContent(content.trim());return commentMutation(c,null);}
-    @Transactional public CommentMutation deleteComment(UUID id,User user){QuestionComment c=getComment(id);SpaceMember m=requireMember(c.getQuestion().getDocument().getSpace().getId(),user);if(!c.getAuthor().getId().equals(user.getId())&&m.getRole()!=SpaceMemberRole.PROFESSOR)fail(QuestionErrorCode.AUTHOR_ONLY);c.delete();return commentMutation(c,true);}
-    @Transactional public Like like(UUID id,User user){Question q=getQuestionForUpdate(id);requireMember(q.getDocument().getSpace().getId(),user);if(likes.existsByQuestionIdAndUserId(id,user.getId()))fail(QuestionErrorCode.LIKE_ALREADY_EXISTS);likes.save(QuestionLike.create(q,user));q.increaseLikeCount();return new Like(id,true,q.getLikeCount());}
-    @Transactional public Like unlike(UUID id,User user){Question q=getQuestionForUpdate(id);requireMember(q.getDocument().getSpace().getId(),user);if(!likes.existsByQuestionIdAndUserId(id,user.getId()))fail(QuestionErrorCode.LIKE_NOT_FOUND);likes.deleteByQuestionIdAndUserId(id,user.getId());q.decreaseLikeCount();return new Like(id,false,q.getLikeCount());}
+        if (documentId != null) {
+            requireDocument(documentId, spaceId);
+        }
 
-    public CategoriesResponse categoryList(UUID spaceId,User user){requireMember(spaceId,user);return new CategoriesResponse(documents.findAllBySpaceIdOrderByCreatedAtDescIdDesc(spaceId).stream().map(d->new DocumentCategories(d.getId(),d.getTitle(),categories.findAllByDocumentIdAndDeletedFalse(d.getId()).stream().map(c->new CategoryItem(c.getId(),c.getName(),c.getCreatedBy()==null?"AI":"MANUAL")).toList())).toList());}
-    @Transactional public CategoryBatchResponse saveCategories(UUID spaceId,CategoryBatchRequest request,User user){requireManager(spaceId,user);List<CategoryResult> out=new ArrayList<>();for(var op:request.operations()){Document d=requireDocument(op.documentId(),spaceId);QuestionCategory c;switch(op.type()){
-      case CREATE->{String name=name(op.name());if(categories.existsByDocumentIdAndNameAndDeletedFalse(d.getId(),name))fail(QuestionErrorCode.CATEGORY_DUPLICATED);c=categories.save(QuestionCategory.createManual(d,name,user));}
-      case UPDATE->{c=getCategory(op.categoryId(),d.getId());String name=name(op.name());if(!c.getName().equals(name)&&categories.existsByDocumentIdAndNameAndDeletedFalse(d.getId(),name))fail(QuestionErrorCode.CATEGORY_DUPLICATED);c.updateName(name);}
-      case DELETE->{c=getCategory(op.categoryId(),d.getId());c.delete();}
-      default->throw new BusinessException(QuestionErrorCode.INVALID_CATEGORY_OPERATION);}
-      out.add(new CategoryResult(op.operationId(),op.type().name(),d.getId(),op.tempId(),c.getId(),c.getName(),"SUCCESS"));}return new CategoryBatchResponse(out,Instant.now());}
-    public ExportResponse export(UUID spaceId,String format,User user){requireManager(spaceId,user);if(!"csv".equalsIgnoreCase(format))fail(QuestionErrorCode.INVALID_CATEGORY_OPERATION);StringBuilder csv=new StringBuilder("question_id,title,content,status,like_count,view_count\n");questions.findAllByDocumentSpaceIdAndDeletedFalse(spaceId).forEach(q->csv.append(q.getId()).append(',').append(quote(q.getTitle())).append(',').append(quote(q.getContent())).append(',').append(q.getStatus()).append(',').append(q.getLikeCount()).append(',').append(q.getViewCount()).append('\n'));return new ExportResponse("data:text/csv;base64,"+Base64.getEncoder().encodeToString(csv.toString().getBytes(StandardCharsets.UTF_8)));}
+        int pageSize = size(size);
+        int offset = offset(cursor);
 
-    private ListItem listItem(Question q){return new ListItem(q.getId(),q.getTitle(),doc(q.getDocument()),slide(q.getSlide()),categoryInfo(q),q.getCreatedAt(),q.getViewCount(),q.getLikeCount(),q.getStatus());}
-    private DocumentListItem documentItem(Question q){return new DocumentListItem(q.getId(),q.getTitle(),q.getContent(),slide(q.getSlide()),categoryInfo(q),q.getXRatio(),q.getYRatio(),q.getLikeCount(),q.getStatus());}
-    private DocumentInfo doc(Document d){return new DocumentInfo(d.getId(),d.getTitle());} private SlideInfo slide(Slide s){return s==null?null:new SlideInfo(s.getId(),s.getPageNumber(),s.getThumbnailKey());}
-    private List<CategoryInfo> categoryInfo(Question q){return mappings.findAllByQuestionId(q.getId()).stream().filter(m->!m.getCategory().isDeleted()).map(m->new CategoryInfo(m.getCategory().getId(),m.getCategory().getName())).toList();}
-    private AuthorInfo author(User u){return new AuthorInfo(u.getId(),u.getName(),u.getProfileUrl());} private AnswerInfo answerInfo(Answer a){return new AnswerInfo(a.getId(),author(a.getAuthor()),a.getContent(),a.getCreatedAt(),a.getUpdatedAt());}
-    private CommentInfo commentInfo(QuestionComment c){return new CommentInfo(c.getId(),c.getParentComment()==null?null:c.getParentComment().getId(),author(c.getAuthor()),c.getContent(),c.getCreatedAt(),c.getUpdatedAt());}
-    private CommentMutation commentMutation(QuestionComment c,Boolean deleted){return new CommentMutation(c.getId(),c.getQuestion().getId(),c.getParentComment()==null?null:c.getParentComment().getId(),c.getContent(),c.getCreatedAt(),deleted==null?Instant.now():c.getUpdatedAt(),deleted);}
-    private Comparator<Question> comparator(QuestionSortType t){Comparator<Question> tie=Comparator.comparing(Question::getCreatedAt).thenComparing(Question::getId).reversed();return switch(t==null?QuestionSortType.LATEST:t){case MOST_VIEWED->Comparator.comparing(Question::getViewCount).reversed().thenComparing(tie);case MOST_POPULAR->Comparator.comparing(Question::getLikeCount).reversed().thenComparing(tie);case LATEST->tie;};}
-    private int size(int n){return n<=0?DEFAULT_SIZE:Math.min(n,MAX_SIZE);}private int offset(String c){OffsetCursor x=cursorCodec.decodeOrNull(c,OffsetCursor.class);return x==null?0:Math.max(0,x.offset());}
-    private SpaceMember requireMember(UUID sid,User u){return members.findBySpaceIdAndUserIdAndStatusAndRemovedAtIsNull(sid,u.getId(),SpaceMemberStatus.APPROVED).orElseThrow(()->new BusinessException(QuestionErrorCode.SPACE_MEMBER_REQUIRED));}
-    private SpaceMember requireStudent(UUID sid,User u){SpaceMember m=requireMember(sid,u);if(m.getRole()!=SpaceMemberRole.STUDENT)fail(QuestionErrorCode.STUDENT_ONLY);return m;}
-    private SpaceMember requireManager(UUID sid,User u){SpaceMember m=requireMember(sid,u);if(m.getRole()!=SpaceMemberRole.PROFESSOR&&!(m.getRole()==SpaceMemberRole.ASSISTANT&&permissions.existsBySpaceMemberIdAndPermission(m.getId(),PermissionType.QUESTION_MANAGE)))fail(QuestionErrorCode.QUESTION_MANAGE_FORBIDDEN);return m;}
-    private void requireProfessor(UUID sid,User u){if(requireMember(sid,u).getRole()!=SpaceMemberRole.PROFESSOR)fail(QuestionErrorCode.QUESTION_MANAGE_FORBIDDEN);}
-    private Question getQuestion(UUID id){return questions.findById(id).filter(q->!q.isDeleted()).orElseThrow(()->new BusinessException(QuestionErrorCode.QUESTION_NOT_FOUND));}private Question getQuestionForUpdate(UUID id){return questions.findQuestionById(id).filter(q->!q.isDeleted()).orElseThrow(()->new BusinessException(QuestionErrorCode.QUESTION_NOT_FOUND));}private Answer getAnswer(UUID id){return answers.findById(id).filter(a->!a.isDeleted()).orElseThrow(()->new BusinessException(QuestionErrorCode.ANSWER_NOT_FOUND));}private QuestionComment getComment(UUID id){return comments.findById(id).filter(c->!c.isDeleted()).orElseThrow(()->new BusinessException(QuestionErrorCode.COMMENT_NOT_FOUND));}
-    private Document getDocument(UUID id){return documents.findById(id).orElseThrow(()->new BusinessException(QuestionErrorCode.DOCUMENT_NOT_FOUND));}private Document requireDocument(UUID id,UUID sid){Document d=getDocument(id);if(!d.getSpace().getId().equals(sid))fail(QuestionErrorCode.DOCUMENT_NOT_FOUND);return d;}private Slide getSlide(UUID id){return slides.findById(id).orElseThrow(()->new BusinessException(QuestionErrorCode.SLIDE_NOT_FOUND));}
-    private QuestionCategory getCategory(UUID id,UUID did){if(id==null)fail(QuestionErrorCode.INVALID_CATEGORY_OPERATION);return categories.findById(id).filter(c->!c.isDeleted()&&c.getDocument().getId().equals(did)).orElseThrow(()->new BusinessException(QuestionErrorCode.CATEGORY_NOT_FOUND));}
-    private String name(String s){if(s==null||s.isBlank())fail(QuestionErrorCode.INVALID_CATEGORY_OPERATION);return s.trim();}private void validatePin(double x,double y){if(x<0||x>1||y<0||y>1)fail(QuestionErrorCode.INVALID_PIN);}private static void fail(QuestionErrorCode e){throw new BusinessException(e);}
-    private Set<String> tokens(String s){Set<String> out=new HashSet<>();for(String x:s.toLowerCase(Locale.ROOT).split("[^\\p{L}\\p{N}]+"))if(x.length()>1)out.add(x);return out;}private double jaccard(Set<String>a,Set<String>b){if(a.isEmpty()&&b.isEmpty())return 0;Set<String> i=new HashSet<>(a);i.retainAll(b);Set<String> u=new HashSet<>(a);u.addAll(b);return (double)i.size()/u.size();}private String quote(String s){return "\""+s.replace("\"","\"\"").replace("\r"," ").replace("\n"," ")+"\"";}
+        List<Question> filtered =
+                (mine
+                        ? questions.findAllByDocumentSpaceIdAndStudentIdAndDeletedFalse(
+                                spaceId,
+                                user.getId()
+                        )
+                        : questions.findAllByDocumentSpaceIdAndDeletedFalse(spaceId))
+                        .stream()
+                        .filter(q ->
+                                documentId == null
+                                        || q.getDocument()
+                                        .getId()
+                                        .equals(documentId)
+                        )
+                        .filter(q ->
+                                categoryId == null
+                                        || mappings.findAllByQuestionId(q.getId())
+                                        .stream()
+                                        .anyMatch(m ->
+                                                m.getCategory()
+                                                        .getId()
+                                                        .equals(categoryId)
+                                                        && !m.getCategory()
+                                                        .isDeleted()
+                                        )
+                        )
+                        .sorted(comparator(sort))
+                        .toList();
+
+        List<Question> page = filtered.stream()
+                .skip(offset)
+                .limit(pageSize)
+                .toList();
+
+        boolean hasNext =
+                offset + page.size() < filtered.size();
+
+        return new ListResponse(
+                page.stream()
+                        .map(question -> listItem(question, user))
+                        .toList(),
+                filtered.size(),
+                hasNext
+                        ? cursorCodec.encode(
+                                new OffsetCursor(
+                                        offset + page.size()
+                                )
+                        )
+                        : null,
+                hasNext
+        );
+    }
+
+    public Summary summary(
+            UUID spaceId,
+            User user
+    ) {
+        SpaceMember member =
+                requireMember(spaceId, user);
+
+        if (member.getRole() != SpaceMemberRole.STUDENT) {
+            fail(QuestionErrorCode.STUDENT_ONLY);
+        }
+
+        long total =
+                questions
+                        .countByDocumentSpaceIdAndStudentIdAndDeletedFalse(
+                                spaceId,
+                                user.getId()
+                        );
+
+        long answered =
+                questions
+                        .findAllByDocumentSpaceIdAndStudentIdAndDeletedFalse(
+                                spaceId,
+                                user.getId()
+                        )
+                        .stream()
+                        .filter(q ->
+                                q.getStatus()
+                                        == QuestionStatus.ANSWERED
+                        )
+                        .count();
+
+        return new Summary(
+                total,
+                answered,
+                total - answered
+        );
+    }
+
+    public DocumentListResponse documentQuestions(
+            UUID documentId,
+            QuestionScope scope,
+            UUID slideId,
+            String cursor,
+            int size,
+            User user
+    ) {
+        Document document =
+                getDocument(documentId);
+
+        requireMember(
+                document.getSpace().getId(),
+                user
+        );
+
+        if (scope == QuestionScope.SLIDE
+                && slideId == null) {
+            fail(QuestionErrorCode.INVALID_SCOPE);
+        }
+
+        if (slideId != null) {
+            Slide slide = getSlide(slideId);
+
+            if (!slide.getDocument()
+                    .getId()
+                    .equals(documentId)) {
+                fail(QuestionErrorCode.SLIDE_NOT_FOUND);
+            }
+        }
+
+        List<Question> all =
+                (scope == QuestionScope.SLIDE
+                        ? questions
+                        .findAllBySlideIdAndDeletedFalse(
+                                slideId
+                        )
+                        : questions
+                        .findAllByDocumentIdAndDeletedFalse(
+                                documentId
+                        ))
+                        .stream()
+                        .sorted(
+                                comparator(
+                                        QuestionSortType.LATEST
+                                )
+                        )
+                        .toList();
+
+        int pageSize = size(size);
+        int offset = offset(cursor);
+
+        List<Question> page =
+                all.stream()
+                        .skip(offset)
+                        .limit(pageSize)
+                        .toList();
+
+        boolean hasNext =
+                offset + page.size() < all.size();
+
+        return new DocumentListResponse(
+                page.stream()
+                        .map(this::documentItem)
+                        .toList(),
+                hasNext
+                        ? cursorCodec.encode(
+                                new OffsetCursor(
+                                        offset + page.size()
+                                )
+                        )
+                        : null,
+                hasNext
+        );
+    }
+
+    @Transactional
+    public Detail detail(
+            UUID id,
+            User user
+    ) {
+        Question question =
+                getQuestion(id);
+
+        requireMember(
+                question.getDocument()
+                        .getSpace()
+                        .getId(),
+                user
+        );
+
+        boolean firstView = recentQuestionViews.insertIfAbsent(
+                user.getId(),
+                question.getId()
+        ) == 1;
+
+        int viewCount = question.getViewCount();
+        if (firstView) {
+            if (questions.increaseViewCount(question.getId()) == 0) {
+                fail(QuestionErrorCode.QUESTION_NOT_FOUND);
+            }
+            viewCount++;
+        } else {
+            recentQuestionViews.refreshViewedAt(
+                    user.getId(),
+                    question.getId()
+            );
+        }
+
+        return new Detail(
+                question.getId(),
+                question.getTitle(),
+                question.getContent(),
+                doc(question.getDocument()),
+                slide(question.getSlide()),
+                categoryInfo(question),
+                question.getXRatio(),
+                question.getYRatio(),
+                viewCount,
+                question.getLikeCount(),
+                likes.existsByQuestionIdAndUserId(
+                        id,
+                        user.getId()
+                ),
+                question.getStatus(),
+                answers
+                        .findAllByQuestionIdAndDeletedFalseOrderByCreatedAtAsc(
+                                id
+                        )
+                        .stream()
+                        .map(this::answerInfo)
+                        .toList(),
+                comments
+                        .findAllByQuestionIdAndDeletedFalseOrderByCreatedAtAsc(
+                                id
+                        )
+                        .stream()
+                        .map(this::commentInfo)
+                        .toList()
+        );
+    }
+
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    public Create createPinned(
+            UUID slideId,
+            QuestionCreateRequest request,
+            User user
+    ) {
+        validatePin(
+                request.xRatio(),
+                request.yRatio()
+        );
+
+        UUID questionId =
+                transactionTemplate.execute(status -> {
+
+                    Slide slide =
+                            getSlide(slideId);
+
+                    requireStudent(
+                            slide.getDocument()
+                                    .getSpace()
+                                    .getId(),
+                            user
+                    );
+
+                    Question question =
+                            Question.createWithPin(
+                                    slide.getDocument(),
+                                    slide,
+                                    user,
+                                    request.title().trim(),
+                                    request.content().trim(),
+                                    request.xRatio(),
+                                    request.yRatio()
+                            );
+
+                    return questions
+                            .save(question)
+                            .getId();
+                });
+
+        if (questionId == null) {
+            throw new IllegalStateException(
+                    "Question creation transaction returned null."
+            );
+        }
+
+        processAiSafely(questionId);
+
+        return transactionTemplate.execute(status -> {
+
+            Question question =
+                    getQuestion(questionId);
+
+            return new Create(
+                    question.getId(),
+                    question.getDocument().getId(),
+                    question.getSlide().getId(),
+                    question.getTitle(),
+                    question.getContent(),
+                    question.getXRatio(),
+                    question.getYRatio(),
+                    categoryInfo(question),
+                    question.getStatus(),
+                    question.getCreatedAt()
+            );
+        });
+    }
+
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    public SpaceCreate create(
+            UUID spaceId,
+            SpaceQuestionCreateRequest request,
+            User user
+    ) {
+        UUID questionId =
+                transactionTemplate.execute(status -> {
+
+                    requireStudent(
+                            spaceId,
+                            user
+                    );
+
+                    Document document =
+                            requireDocument(
+                                    request.documentId(),
+                                    spaceId
+                            );
+
+                    Question question =
+                            Question.create(
+                                    document,
+                                    user,
+                                    request.title().trim(),
+                                    request.content().trim()
+                            );
+
+                    return questions
+                            .save(question)
+                            .getId();
+                });
+
+        if (questionId == null) {
+            throw new IllegalStateException(
+                    "Question creation transaction returned null."
+            );
+        }
+
+        processAiSafely(questionId);
+
+        return transactionTemplate.execute(status -> {
+
+            Question question =
+                    getQuestion(questionId);
+
+            return new SpaceCreate(
+                    question.getId(),
+                    doc(question.getDocument()),
+                    null,
+                    question.getTitle(),
+                    question.getContent(),
+                    categoryInfo(question),
+                    question.getStatus(),
+                    question.getCreatedAt()
+            );
+        });
+    }
+
+    public SimilarResponse similar(
+            UUID questionId,
+            User user
+    ) {
+        Question source =
+                getQuestion(questionId);
+
+        requireMember(
+                source.getDocument()
+                        .getSpace()
+                        .getId(),
+                user
+        );
+
+        List<SimilarItem> found =
+                similarQuestionService
+                        .findSimilarQuestions(questionId)
+                        .stream()
+                        .map(result -> {
+                            Question question =
+                                    result.question();
+
+                            return new SimilarItem(
+                                    question.getId(),
+                                    question.getTitle(),
+                                    question.getContent(),
+                                    categoryInfo(question),
+                                    question.getStatus(),
+                                    question.getLikeCount(),
+                                    likes.existsByQuestionIdAndUserId(
+                                            question.getId(),
+                                            user.getId()
+                                    ),
+                                    result.similarity()
+                            );
+                        })
+                        .toList();
+
+        return new SimilarResponse(questionId, found);
+    }
+
+    @Transactional
+    public Delete deleteQuestion(
+            UUID id,
+            User user
+    ) {
+        Question question =
+                getQuestion(id);
+
+        requireProfessor(
+                question.getDocument()
+                        .getSpace()
+                        .getId(),
+                user
+        );
+
+        question.delete();
+
+        return new Delete(
+                question.getId(),
+                true,
+                question.getDeletedAt()
+        );
+    }
+
+    @Transactional
+    public AnswerMutation addAnswer(
+            UUID questionId,
+            String content,
+            User user
+    ) {
+        Question question =
+                getQuestion(questionId);
+
+        requireManager(
+                question.getDocument()
+                        .getSpace()
+                        .getId(),
+                user
+        );
+
+        Answer answer =
+                answers.save(
+                        Answer.create(
+                                question,
+                                user,
+                                content.trim()
+                        )
+                );
+
+        question.markAnswered();
+
+        return new AnswerMutation(
+                answer.getId(),
+                questionId,
+                answer.getContent(),
+                answer.getCreatedAt(),
+                answer.getUpdatedAt(),
+                null
+        );
+    }
+
+    @Transactional
+    public AnswerMutation updateAnswer(
+            UUID id,
+            String content,
+            User user
+    ) {
+        Answer answer =
+                getAnswer(id);
+
+        if (!answer.getAuthor()
+                .getId()
+                .equals(user.getId())) {
+            fail(QuestionErrorCode.AUTHOR_ONLY);
+        }
+
+        answer.updateContent(
+                content.trim()
+        );
+
+        return new AnswerMutation(
+                answer.getId(),
+                answer.getQuestion().getId(),
+                answer.getContent(),
+                answer.getCreatedAt(),
+                Instant.now(),
+                null
+        );
+    }
+
+    @Transactional
+    public AnswerMutation deleteAnswer(
+            UUID id,
+            User user
+    ) {
+        Answer answer =
+                getAnswer(id);
+
+        SpaceMember member =
+                requireMember(
+                        answer.getQuestion()
+                                .getDocument()
+                                .getSpace()
+                                .getId(),
+                        user
+                );
+
+        if (!answer.getAuthor()
+                .getId()
+                .equals(user.getId())
+                && member.getRole()
+                != SpaceMemberRole.PROFESSOR) {
+
+            fail(QuestionErrorCode.AUTHOR_ONLY);
+        }
+
+        answer.delete();
+
+        if (answers.countByQuestionIdAndDeletedFalse(
+                answer.getQuestion().getId()
+        ) == 0) {
+            answer.getQuestion().markPending();
+        }
+
+        return new AnswerMutation(
+                answer.getId(),
+                answer.getQuestion().getId(),
+                answer.getContent(),
+                answer.getCreatedAt(),
+                answer.getUpdatedAt(),
+                true
+        );
+    }
+
+    @Transactional
+    public CommentMutation addComment(
+            UUID questionId,
+            CommentCreateRequest request,
+            User user
+    ) {
+        Question question =
+                getQuestion(questionId);
+
+        requireManager(
+                question.getDocument()
+                        .getSpace()
+                        .getId(),
+                user
+        );
+
+        QuestionComment parent =
+                request.parentCommentId() == null
+                        ? null
+                        : getComment(
+                                request.parentCommentId()
+                        );
+
+        if (parent != null
+                && !parent.getQuestion()
+                .getId()
+                .equals(questionId)) {
+
+            fail(
+                    QuestionErrorCode.COMMENT_NOT_FOUND
+            );
+        }
+
+        QuestionComment comment =
+                comments.save(
+                        QuestionComment.create(
+                                question,
+                                user,
+                                parent,
+                                request.content().trim()
+                        )
+                );
+
+        return commentMutation(
+                comment,
+                null
+        );
+    }
+
+    @Transactional
+    public CommentMutation updateComment(
+            UUID id,
+            String content,
+            User user
+    ) {
+        QuestionComment comment =
+                getComment(id);
+
+        if (!comment.getAuthor()
+                .getId()
+                .equals(user.getId())) {
+
+            fail(QuestionErrorCode.AUTHOR_ONLY);
+        }
+
+        comment.updateContent(
+                content.trim()
+        );
+
+        return commentMutation(
+                comment,
+                null
+        );
+    }
+
+    @Transactional
+    public CommentMutation deleteComment(
+            UUID id,
+            User user
+    ) {
+        QuestionComment comment =
+                getComment(id);
+
+        SpaceMember member =
+                requireMember(
+                        comment.getQuestion()
+                                .getDocument()
+                                .getSpace()
+                                .getId(),
+                        user
+                );
+
+        if (!comment.getAuthor()
+                .getId()
+                .equals(user.getId())
+                && member.getRole()
+                != SpaceMemberRole.PROFESSOR) {
+
+            fail(QuestionErrorCode.AUTHOR_ONLY);
+        }
+
+        comment.delete();
+
+        return commentMutation(
+                comment,
+                true
+        );
+    }
+
+    @Transactional
+    public Like like(
+            UUID id,
+            User user
+    ) {
+        Question question =
+                getQuestionForUpdate(id);
+
+        requireMember(
+                question.getDocument()
+                        .getSpace()
+                        .getId(),
+                user
+        );
+
+        if (likes.existsByQuestionIdAndUserId(
+                id,
+                user.getId()
+        )) {
+            fail(
+                    QuestionErrorCode.LIKE_ALREADY_EXISTS
+            );
+        }
+
+        likes.save(
+                QuestionLike.create(
+                        question,
+                        user
+                )
+        );
+
+        question.increaseLikeCount();
+
+        return new Like(
+                id,
+                true,
+                question.getLikeCount()
+        );
+    }
+
+    @Transactional
+    public Like unlike(
+            UUID id,
+            User user
+    ) {
+        Question question =
+                getQuestionForUpdate(id);
+
+        requireMember(
+                question.getDocument()
+                        .getSpace()
+                        .getId(),
+                user
+        );
+
+        if (!likes.existsByQuestionIdAndUserId(
+                id,
+                user.getId()
+        )) {
+            fail(
+                    QuestionErrorCode.LIKE_NOT_FOUND
+            );
+        }
+
+        likes.deleteByQuestionIdAndUserId(
+                id,
+                user.getId()
+        );
+
+        question.decreaseLikeCount();
+
+        return new Like(
+                id,
+                false,
+                question.getLikeCount()
+        );
+    }
+
+    public CategoriesResponse categoryList(
+            UUID spaceId,
+            User user
+    ) {
+        requireMember(
+                spaceId,
+                user
+        );
+
+        return new CategoriesResponse(
+                documents
+                        .findAllBySpaceIdOrderByCreatedAtDescIdDesc(
+                                spaceId
+                        )
+                        .stream()
+                        .map(document ->
+                                new DocumentCategories(
+                                        document.getId(),
+                                        document.getTitle(),
+                                        categories
+                                                .findAllByDocumentIdAndDeletedFalse(
+                                                        document.getId()
+                                                )
+                                                .stream()
+                                                .map(category ->
+                                                        new CategoryItem(
+                                                                category.getId(),
+                                                                category.getName(),
+                                                                category.getCreatedBy()
+                                                                        == null
+                                                                        ? "AI"
+                                                                        : "MANUAL"
+                                                        )
+                                                )
+                                                .toList()
+                                )
+                        )
+                        .toList()
+        );
+    }
+
+    /**
+     * 이전 프론트엔드가 사용하는 카테고리 일괄 저장 API 호환용 구현이다.
+     */
+    @Transactional
+    public CategoryBatchResponse saveCategories(
+            UUID spaceId,
+            CategoryBatchRequest request,
+            User user
+    ) {
+        requireManager(spaceId, user);
+
+        List<CategoryResult> results = new ArrayList<>();
+
+        for (CategoryBatchRequest.Operation operation : request.operations()) {
+            Document document = requireDocument(operation.documentId(), spaceId);
+            QuestionCategory category;
+
+            switch (operation.type()) {
+                case CREATE -> {
+                    String categoryName = name(operation.name());
+
+                    if (categories.existsByDocumentIdAndNameAndDeletedFalse(
+                            document.getId(), categoryName)) {
+                        fail(QuestionErrorCode.CATEGORY_DUPLICATED);
+                    }
+
+                    category = categories.save(
+                            QuestionCategory.createManual(document, categoryName, user));
+                }
+                case UPDATE -> {
+                    category = getCategory(operation.categoryId(), document.getId());
+                    String categoryName = name(operation.name());
+
+                    if (!category.getName().equals(categoryName)
+                            && categories.existsByDocumentIdAndNameAndDeletedFalse(
+                                    document.getId(), categoryName)) {
+                        fail(QuestionErrorCode.CATEGORY_DUPLICATED);
+                    }
+
+                    category.updateName(categoryName);
+                }
+                case DELETE -> {
+                    category = getCategory(operation.categoryId(), document.getId());
+                    category.delete();
+                    mappings.deleteAllByCategoryId(category.getId());
+                }
+                default -> throw new BusinessException(
+                        QuestionErrorCode.INVALID_CATEGORY_OPERATION);
+            }
+
+            results.add(new CategoryResult(
+                    operation.operationId(),
+                    operation.type().name(),
+                    document.getId(),
+                    operation.tempId(),
+                    category.getId(),
+                    category.getName(),
+                    "SUCCESS"
+            ));
+
+            if (operation.type() != CategoryBatchRequest.Type.DELETE) {
+                categoryQuestionRemappingService.scheduleRecalculation(document.getId());
+            }
+        }
+
+        return new CategoryBatchResponse(results, Instant.now());
+    }
+
+    @Transactional
+    public CategoryMutation createCategory(
+            UUID documentId,
+            CategoryCreateRequest request,
+            User user
+    ) {
+        Document document = getDocument(documentId);
+        requireManager(document.getSpace().getId(), user);
+        String categoryName = name(request.name());
+
+        if (categories.existsByDocumentIdAndNameAndDeletedFalse(documentId, categoryName)) {
+            fail(QuestionErrorCode.CATEGORY_DUPLICATED);
+        }
+
+        QuestionCategory category = categories.save(
+                QuestionCategory.createManual(document, categoryName, user)
+        );
+
+        categoryQuestionRemappingService.scheduleRecalculation(documentId);
+
+        return new CategoryMutation(
+                category.getId(), documentId, category.getName(), category.getSourceType().name()
+        );
+    }
+
+    @Transactional
+    public CategoryMutation updateCategory(
+            UUID categoryId,
+            CategoryUpdateRequest request,
+            User user
+    ) {
+        QuestionCategory category = categories.findById(categoryId)
+                .filter(value -> !value.isDeleted())
+                .orElseThrow(() -> new BusinessException(QuestionErrorCode.CATEGORY_NOT_FOUND));
+
+        requireManager(category.getDocument().getSpace().getId(), user);
+        String categoryName = name(request.name());
+
+        if (!category.getName().equals(categoryName)
+                && categories.existsByDocumentIdAndNameAndDeletedFalse(
+                        category.getDocument().getId(), categoryName)) {
+            fail(QuestionErrorCode.CATEGORY_DUPLICATED);
+        }
+
+        category.updateName(categoryName);
+        categoryQuestionRemappingService.scheduleRecalculation(
+                category.getDocument().getId()
+        );
+
+        return new CategoryMutation(
+                category.getId(), category.getDocument().getId(), category.getName(), category.getSourceType().name()
+        );
+    }
+
+    @Transactional
+    public CategoryMutation deleteCategory(
+            UUID categoryId,
+            User user
+    ) {
+        QuestionCategory category = categories.findById(categoryId)
+                .filter(value -> !value.isDeleted())
+                .orElseThrow(() -> new BusinessException(QuestionErrorCode.CATEGORY_NOT_FOUND));
+
+        requireManager(category.getDocument().getSpace().getId(), user);
+        category.delete();
+        mappings.deleteAllByCategoryId(categoryId);
+
+        return new CategoryMutation(
+                category.getId(), category.getDocument().getId(), category.getName(), category.getSourceType().name()
+        );
+    }
+
+    public CategorizedQuestionsResponse categorizedQuestions(
+            UUID documentId,
+            User user
+    ) {
+        Document document = getDocument(documentId);
+        requireMember(document.getSpace().getId(), user);
+
+        List<CategoryGroup> groups = categories.findAllByDocumentIdAndDeletedFalse(documentId)
+                .stream()
+                .map(category -> new CategoryGroup(
+                        category.getId(),
+                        category.getName(),
+                        mappings.findAllByCategoryId(category.getId()).stream()
+                                .map(mapping -> mapping.getQuestion())
+                                .filter(question -> !question.isDeleted())
+                                .filter(question -> question.getQuestionScope() == com.tikitaka.question.entity.QuestionScope.COURSE_RELATED)
+                                .sorted(Comparator.comparing(Question::getCreatedAt).reversed())
+                                .map(question -> new CategorizedQuestion(
+                                        question.getId(),
+                                        question.getTitle(),
+                                        question.getContent(),
+                                        question.getStatus(),
+                                        question.getLikeCount()
+                                ))
+                                .toList()
+                ))
+                .toList();
+
+        return new CategorizedQuestionsResponse(documentId, groups);
+    }
+
+    public ExportResponse export(
+            UUID spaceId,
+            String format,
+            User user
+    ) {
+        requireManager(
+                spaceId,
+                user
+        );
+
+        if (!"csv".equalsIgnoreCase(format)) {
+            fail(
+                    QuestionErrorCode
+                            .INVALID_CATEGORY_OPERATION
+            );
+        }
+
+        StringBuilder csv =
+                new StringBuilder(
+                        "question_id,title,content,status,like_count,view_count\n"
+                );
+
+        questions
+                .findAllByDocumentSpaceIdAndDeletedFalse(
+                        spaceId
+                )
+                .forEach(question ->
+                        csv.append(question.getId())
+                                .append(',')
+                                .append(
+                                        quote(
+                                                question.getTitle()
+                                        )
+                                )
+                                .append(',')
+                                .append(
+                                        quote(
+                                                question.getContent()
+                                        )
+                                )
+                                .append(',')
+                                .append(
+                                        question.getStatus()
+                                )
+                                .append(',')
+                                .append(
+                                        question.getLikeCount()
+                                )
+                                .append(',')
+                                .append(
+                                        question.getViewCount()
+                                )
+                                .append('\n')
+                );
+
+        return new ExportResponse(
+                "data:text/csv;base64,"
+                        + Base64
+                        .getEncoder()
+                        .encodeToString(
+                                csv.toString()
+                                        .getBytes(
+                                                StandardCharsets.UTF_8
+                                        )
+                        )
+        );
+    }
+
+    private void processAiSafely(
+            UUID questionId
+    ) {
+        try {
+            questionAiProcessingService.process(
+                    questionId,
+                    null,
+                    null
+            );
+
+        } catch (Exception exception) {
+
+            log.warn(
+                    "Question AI processing failed. questionId={}",
+                    questionId,
+                    exception
+            );
+        }
+    }
+
+    private ListItem listItem(
+            Question question,
+            User user
+    ) {
+        return new ListItem(
+                question.getId(),
+                question.getTitle(),
+                doc(question.getDocument()),
+                slide(question.getSlide()),
+                categoryInfo(question),
+                question.getCreatedAt(),
+                question.getViewCount(),
+                question.getLikeCount(),
+                likes.existsByQuestionIdAndUserId(
+                        question.getId(),
+                        user.getId()
+                ),
+                question.getStatus()
+        );
+    }
+
+    private DocumentListItem documentItem(
+            Question question
+    ) {
+        return new DocumentListItem(
+                question.getId(),
+                question.getTitle(),
+                question.getContent(),
+                slide(question.getSlide()),
+                categoryInfo(question),
+                question.getXRatio(),
+                question.getYRatio(),
+                question.getLikeCount(),
+                question.getStatus()
+        );
+    }
+
+    private DocumentInfo doc(
+            Document document
+    ) {
+        return new DocumentInfo(
+                document.getId(),
+                document.getTitle()
+        );
+    }
+
+    private SlideInfo slide(
+            Slide slide
+    ) {
+        return slide == null
+                ? null
+                : new SlideInfo(
+                        slide.getId(),
+                        slide.getPageNumber(),
+                        slide.getThumbnailKey()
+                );
+    }
+
+    private List<CategoryInfo> categoryInfo(
+            Question question
+    ) {
+        return mappings
+                .findAllByQuestionId(
+                        question.getId()
+                )
+                .stream()
+                .filter(mapping ->
+                        !mapping.getCategory()
+                                .isDeleted()
+                )
+                .map(mapping ->
+                        new CategoryInfo(
+                                mapping.getCategory()
+                                        .getId(),
+                                mapping.getCategory()
+                                        .getName()
+                        )
+                )
+                .toList();
+    }
+
+    private AuthorInfo author(
+            User user
+    ) {
+        return new AuthorInfo(
+                user.getId(),
+                user.getName(),
+                user.getProfileUrl()
+        );
+    }
+
+    private AnswerInfo answerInfo(
+            Answer answer
+    ) {
+        return new AnswerInfo(
+                answer.getId(),
+                author(answer.getAuthor()),
+                answer.getContent(),
+                answer.getCreatedAt(),
+                answer.getUpdatedAt(),
+                answer.getAnswerType(),
+                answer.getTranscript()
+        );
+    }
+
+    private CommentInfo commentInfo(
+            QuestionComment comment
+    ) {
+        return new CommentInfo(
+                comment.getId(),
+                comment.getParentComment() == null
+                        ? null
+                        : comment.getParentComment()
+                        .getId(),
+                author(comment.getAuthor()),
+                comment.getContent(),
+                comment.getCreatedAt(),
+                comment.getUpdatedAt()
+        );
+    }
+
+    private CommentMutation commentMutation(
+            QuestionComment comment,
+            Boolean deleted
+    ) {
+        return new CommentMutation(
+                comment.getId(),
+                comment.getQuestion().getId(),
+                comment.getParentComment() == null
+                        ? null
+                        : comment.getParentComment()
+                        .getId(),
+                comment.getContent(),
+                comment.getCreatedAt(),
+                deleted == null
+                        ? Instant.now()
+                        : comment.getUpdatedAt(),
+                deleted
+        );
+    }
+
+    private Comparator<Question> comparator(
+            QuestionSortType type
+    ) {
+        Comparator<Question> tie =
+                Comparator
+                        .comparing(
+                                Question::getCreatedAt
+                        )
+                        .thenComparing(
+                                Question::getId
+                        )
+                        .reversed();
+
+        return switch (
+                type == null
+                        ? QuestionSortType.LATEST
+                        : type
+        ) {
+            case MOST_VIEWED ->
+                    Comparator
+                            .comparing(
+                                    Question::getViewCount
+                            )
+                            .reversed()
+                            .thenComparing(tie);
+
+            case MOST_POPULAR ->
+                    Comparator
+                            .comparing(
+                                    Question::getLikeCount
+                            )
+                            .reversed()
+                            .thenComparing(tie);
+
+            case LATEST -> tie;
+        };
+    }
+
+    private int size(
+            int size
+    ) {
+        return size <= 0
+                ? DEFAULT_SIZE
+                : Math.min(
+                        size,
+                        MAX_SIZE
+                );
+    }
+
+    private int offset(
+            String cursor
+    ) {
+        OffsetCursor decoded =
+                cursorCodec.decodeOrNull(
+                        cursor,
+                        OffsetCursor.class
+                );
+
+        return decoded == null
+                ? 0
+                : Math.max(
+                        0,
+                        decoded.offset()
+                );
+    }
+
+    private SpaceMember requireMember(
+            UUID spaceId,
+            User user
+    ) {
+        return members
+                .findBySpaceIdAndUserIdAndStatusAndRemovedAtIsNull(
+                        spaceId,
+                        user.getId(),
+                        SpaceMemberStatus.APPROVED
+                )
+                .orElseThrow(() ->
+                        new BusinessException(
+                                QuestionErrorCode
+                                        .SPACE_MEMBER_REQUIRED
+                        )
+                );
+    }
+
+    private SpaceMember requireStudent(
+            UUID spaceId,
+            User user
+    ) {
+        SpaceMember member =
+                requireMember(
+                        spaceId,
+                        user
+                );
+
+        if (member.getRole()
+                != SpaceMemberRole.STUDENT) {
+            fail(
+                    QuestionErrorCode.STUDENT_ONLY
+            );
+        }
+
+        return member;
+    }
+
+    private SpaceMember requireManager(
+            UUID spaceId,
+            User user
+    ) {
+        SpaceMember member =
+                requireMember(
+                        spaceId,
+                        user
+                );
+
+        if (member.getRole()
+                != SpaceMemberRole.PROFESSOR
+                && !(member.getRole()
+                == SpaceMemberRole.ASSISTANT
+                && permissions
+                .existsBySpaceMemberIdAndPermission(
+                        member.getId(),
+                        PermissionType.QUESTION_MANAGE
+                ))) {
+
+            fail(
+                    QuestionErrorCode
+                            .QUESTION_MANAGE_FORBIDDEN
+            );
+        }
+
+        return member;
+    }
+
+    private void requireProfessor(
+            UUID spaceId,
+            User user
+    ) {
+        if (requireMember(
+                spaceId,
+                user
+        ).getRole()
+                != SpaceMemberRole.PROFESSOR) {
+
+            fail(
+                    QuestionErrorCode
+                            .QUESTION_MANAGE_FORBIDDEN
+            );
+        }
+    }
+
+    private Question getQuestion(
+            UUID id
+    ) {
+        return questions
+                .findById(id)
+                .filter(question ->
+                        !question.isDeleted()
+                )
+                .orElseThrow(() ->
+                        new BusinessException(
+                                QuestionErrorCode
+                                        .QUESTION_NOT_FOUND
+                        )
+                );
+    }
+
+    private Question getQuestionForUpdate(
+            UUID id
+    ) {
+        return questions
+                .findQuestionById(id)
+                .filter(question ->
+                        !question.isDeleted()
+                )
+                .orElseThrow(() ->
+                        new BusinessException(
+                                QuestionErrorCode
+                                        .QUESTION_NOT_FOUND
+                        )
+                );
+    }
+
+    private Answer getAnswer(
+            UUID id
+    ) {
+        return answers
+                .findById(id)
+                .filter(answer ->
+                        !answer.isDeleted()
+                )
+                .orElseThrow(() ->
+                        new BusinessException(
+                                QuestionErrorCode
+                                        .ANSWER_NOT_FOUND
+                        )
+                );
+    }
+
+    private QuestionComment getComment(
+            UUID id
+    ) {
+        return comments
+                .findById(id)
+                .filter(comment ->
+                        !comment.isDeleted()
+                )
+                .orElseThrow(() ->
+                        new BusinessException(
+                                QuestionErrorCode
+                                        .COMMENT_NOT_FOUND
+                        )
+                );
+    }
+
+    private Document getDocument(
+            UUID id
+    ) {
+        return documents
+                .findById(id)
+                .orElseThrow(() ->
+                        new BusinessException(
+                                QuestionErrorCode
+                                        .DOCUMENT_NOT_FOUND
+                        )
+                );
+    }
+
+    private Document requireDocument(
+            UUID id,
+            UUID spaceId
+    ) {
+        Document document =
+                getDocument(id);
+
+        if (!document.getSpace()
+                .getId()
+                .equals(spaceId)) {
+
+            fail(
+                    QuestionErrorCode
+                            .DOCUMENT_NOT_FOUND
+            );
+        }
+
+        return document;
+    }
+
+    private Slide getSlide(
+            UUID id
+    ) {
+        return slides
+                .findById(id)
+                .orElseThrow(() ->
+                        new BusinessException(
+                                QuestionErrorCode
+                                        .SLIDE_NOT_FOUND
+                        )
+                );
+    }
+
+    private QuestionCategory getCategory(
+            UUID id,
+            UUID documentId
+    ) {
+        if (id == null) {
+            fail(
+                    QuestionErrorCode
+                            .INVALID_CATEGORY_OPERATION
+            );
+        }
+
+        return categories
+                .findById(id)
+                .filter(category ->
+                        !category.isDeleted()
+                                && category
+                                .getDocument()
+                                .getId()
+                                .equals(documentId)
+                )
+                .orElseThrow(() ->
+                        new BusinessException(
+                                QuestionErrorCode
+                                        .CATEGORY_NOT_FOUND
+                        )
+                );
+    }
+
+    private String name(
+            String value
+    ) {
+        if (value == null
+                || value.isBlank()) {
+
+            fail(
+                    QuestionErrorCode
+                            .INVALID_CATEGORY_OPERATION
+            );
+        }
+
+        return value.trim();
+    }
+
+    private void validatePin(
+            double x,
+            double y
+    ) {
+        if (x < 0
+                || x > 1
+                || y < 0
+                || y > 1) {
+
+            fail(
+                    QuestionErrorCode.INVALID_PIN
+            );
+        }
+    }
+
+    private static void fail(
+            QuestionErrorCode errorCode
+    ) {
+        throw new BusinessException(
+                errorCode
+        );
+    }
+
+    private String quote(
+            String value
+    ) {
+        return "\""
+                + value
+                .replace(
+                        "\"",
+                        "\"\""
+                )
+                .replace(
+                        "\r",
+                        " "
+                )
+                .replace(
+                        "\n",
+                        " "
+                )
+                + "\"";
+    }
 }

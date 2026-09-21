@@ -3,6 +3,10 @@ package com.tikitaka.question.entity;
 import java.time.Instant;
 import java.util.UUID;
 
+import org.hibernate.annotations.Array;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
 import com.tikitaka.document.entity.Document;
 import com.tikitaka.document.entity.Slide;
 import com.tikitaka.global.common.entity.BaseTimeEntity;
@@ -28,6 +32,8 @@ import lombok.NoArgsConstructor;
 @Table(name = "questions")
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Question extends BaseTimeEntity {
+
+    private static final int EMBEDDING_DIMENSION = 768;
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
@@ -67,6 +73,27 @@ public class Question extends BaseTimeEntity {
     @Column(name = "like_count", nullable = false)
     private Integer likeCount = 0;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "question_scope", length = 20)
+    private QuestionScope questionScope;
+
+    @JdbcTypeCode(SqlTypes.VECTOR)
+    @Array(length = EMBEDDING_DIMENSION)
+    @Column(name = "embedding", columnDefinition = "vector(768)")
+    private float[] embedding;
+
+    @Enumerated(EnumType.STRING)
+    @Column(
+            name = "ai_processing_status",
+            nullable = false,
+            length = 20
+    )
+    private AiProcessingStatus aiProcessingStatus =
+            AiProcessingStatus.PENDING;
+
+    @Column(name = "ai_processed_at")
+    private Instant aiProcessedAt;
+
     @Column(name = "is_deleted", nullable = false)
     private boolean deleted = false;
 
@@ -89,6 +116,8 @@ public class Question extends BaseTimeEntity {
         this.content = content;
         this.xRatio = xRatio;
         this.yRatio = yRatio;
+        this.aiProcessingStatus =
+                AiProcessingStatus.PENDING;
     }
 
     public static Question create(
@@ -128,12 +157,74 @@ public class Question extends BaseTimeEntity {
         );
     }
 
+    public void startAiProcessing() {
+        this.aiProcessingStatus =
+                AiProcessingStatus.PROCESSING;
+    }
+
+    public void completeCourseRelatedProcessing(
+            float[] embedding
+    ) {
+        validateEmbedding(embedding);
+
+        this.questionScope =
+                QuestionScope.COURSE_RELATED;
+
+        this.embedding = embedding;
+
+        this.aiProcessingStatus =
+                AiProcessingStatus.COMPLETED;
+
+        this.aiProcessedAt =
+                Instant.now();
+    }
+
+    public void completeOtherProcessing() {
+        this.questionScope =
+                QuestionScope.OTHER;
+
+        this.embedding = null;
+
+        this.aiProcessingStatus =
+                AiProcessingStatus.COMPLETED;
+
+        this.aiProcessedAt =
+                Instant.now();
+    }
+
+    public void failAiProcessing() {
+        this.questionScope = null;
+        this.embedding = null;
+
+        this.aiProcessingStatus =
+                AiProcessingStatus.FAILED;
+
+        this.aiProcessedAt = null;
+    }
+
+    private void validateEmbedding(
+            float[] embedding
+    ) {
+        if (embedding == null
+                || embedding.length
+                != EMBEDDING_DIMENSION) {
+
+            throw new IllegalArgumentException(
+                    "Embedding dimension must be "
+                            + EMBEDDING_DIMENSION
+                            + "."
+            );
+        }
+    }
+
     public void markAnswered() {
-        this.status = QuestionStatus.ANSWERED;
+        this.status =
+                QuestionStatus.ANSWERED;
     }
 
     public void markPending() {
-        this.status = QuestionStatus.PENDING;
+        this.status =
+                QuestionStatus.PENDING;
     }
 
     public void increaseViewCount() {
@@ -152,6 +243,7 @@ public class Question extends BaseTimeEntity {
 
     public void delete() {
         this.deleted = true;
-        this.deletedAt = Instant.now();
+        this.deletedAt =
+                Instant.now();
     }
 }

@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -11,8 +12,11 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+import com.tikitaka.document.dto.request.DocumentRevisionCompleteRequest;
 import com.tikitaka.document.entity.Document;
 import com.tikitaka.document.entity.DocumentRevision;
 import com.tikitaka.document.entity.RevisionSlide;
@@ -55,6 +59,13 @@ class DocumentRevisionServiceTests {
             documentRepository, revisionRepository, revisionPageRepository, revisionSlideRepository,
             revisionOperationRepository, slideRepository, memberRepository, permissionRepository,
             fileValidator, pdfProcessor, storage, completionWorker);
+
+    @AfterEach
+    void clearSynchronization() {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
 
     @Test
     void createsNewRevisionWhenNoActiveRevisionExists() {
@@ -131,6 +142,86 @@ class DocumentRevisionServiceTests {
                 .extracting(exception -> ((BusinessException) exception).getErrorCode())
                 .isEqualTo(DocumentErrorCode.REVISION_NOT_EDITABLE);
     }
+
+    @Test
+    void completesRevisionWithNormalizedTitle() {
+        CompleteFixture fixture = completeFixture();
+        TransactionSynchronizationManager.initSynchronization();
+
+        service.complete(
+                fixture.documentId(),
+                fixture.revisionId(),
+                new DocumentRevisionCompleteRequest(2, "  Updated lecture  "),
+                fixture.user());
+        TransactionSynchronizationManager.getSynchronizations()
+                .forEach(synchronization -> synchronization.afterCommit());
+
+        verify(fixture.revision()).startProcessing();
+        verify(completionWorker).completeAsync(fixture.revisionId(), "Updated lecture");
+    }
+
+    @Test
+    void keepsExistingTitleWhenCompleteTitleIsNull() {
+        CompleteFixture fixture = completeFixture();
+        TransactionSynchronizationManager.initSynchronization();
+
+        service.complete(
+                fixture.documentId(),
+                fixture.revisionId(),
+                new DocumentRevisionCompleteRequest(2, null),
+                fixture.user());
+        TransactionSynchronizationManager.getSynchronizations()
+                .forEach(synchronization -> synchronization.afterCommit());
+
+        verify(completionWorker).completeAsync(fixture.revisionId(), "Lecture");
+    }
+
+    @Test
+    void rejectsBlankCompleteTitle() {
+        CompleteFixture fixture = completeFixture();
+
+        assertThatThrownBy(() -> service.complete(
+                fixture.documentId(),
+                fixture.revisionId(),
+                new DocumentRevisionCompleteRequest(2, "   "),
+                fixture.user()))
+                .isInstanceOf(BusinessException.class)
+                .extracting(exception -> ((BusinessException) exception).getErrorCode())
+                .isEqualTo(DocumentErrorCode.INVALID_DOCUMENT_TITLE);
+
+        verify(fixture.revision(), never()).startProcessing();
+        verify(completionWorker, never()).completeAsync(any(), any());
+    }
+
+    private CompleteFixture completeFixture() {
+        UUID documentId = UUID.randomUUID();
+        UUID revisionId = UUID.randomUUID();
+        User user = mock(User.class);
+        Document document = mock(Document.class);
+        DocumentRevision revision = mock(DocumentRevision.class);
+        UUID userId = UUID.randomUUID();
+
+        when(user.getId()).thenReturn(userId);
+        when(document.getId()).thenReturn(documentId);
+        when(document.getVersion()).thenReturn(3);
+        when(document.getTitle()).thenReturn("Lecture");
+        when(revision.getId()).thenReturn(revisionId);
+        when(revision.getDocument()).thenReturn(document);
+        when(revision.getEditor()).thenReturn(user);
+        when(revision.getStatus()).thenReturn(RevisionStatus.EDITING);
+        when(revision.getPreviewVersion()).thenReturn(2);
+        when(revision.getBaseDocumentVersion()).thenReturn(3);
+        when(revisionRepository.findByIdForUpdate(revisionId)).thenReturn(Optional.of(revision));
+
+        return new CompleteFixture(documentId, revisionId, user, revision);
+    }
+
+    private record CompleteFixture(
+            UUID documentId,
+            UUID revisionId,
+            User user,
+            DocumentRevision revision
+    ) {}
 
     private User manager() {
         UUID userId = UUID.randomUUID();

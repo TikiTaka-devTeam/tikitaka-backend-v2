@@ -72,6 +72,9 @@ class DocumentServiceTests {
     private final NotificationService notificationService =
             mock(NotificationService.class);
 
+    private final DocumentAiProcessingService documentAiProcessingService =
+            mock(DocumentAiProcessingService.class);
+
     private final DocumentService service =
             new DocumentService(
                     documentRepository,
@@ -82,7 +85,8 @@ class DocumentServiceTests {
                     fileValidator,
                     pdfProcessor,
                     storage,
-                    notificationService
+                    notificationService,
+                    documentAiProcessingService
             );
 
     @AfterEach
@@ -94,8 +98,12 @@ class DocumentServiceTests {
 
     @Test
     void returnsPresignedThumbnailUrlsToApprovedMember() {
-        UUID spaceId = UUID.randomUUID();
-        User user = user();
+
+        UUID spaceId =
+                UUID.randomUUID();
+
+        User user =
+                user();
 
         approve(
                 spaceId,
@@ -103,14 +111,20 @@ class DocumentServiceTests {
                 SpaceMemberRole.STUDENT
         );
 
-        Document document = mock(Document.class);
+        Document document =
+                mock(Document.class);
 
-        when(document.getThumbnailKey())
-                .thenReturn("documents/thumbnail.png");
+        when(
+                document.getThumbnailKey()
+        ).thenReturn(
+                "documents/thumbnail.png"
+        );
 
         when(
                 documentRepository
-                        .findAllBySpaceIdOrderByCreatedAtDescIdDesc(spaceId)
+                        .findAllBySpaceIdOrderByCreatedAtDescIdDesc(
+                                spaceId
+                        )
         ).thenReturn(
                 List.of(document)
         );
@@ -133,7 +147,8 @@ class DocumentServiceTests {
                 .hasSize(1);
 
         assertThat(
-                result.get(0).thumbnailUrl()
+                result.get(0)
+                        .thumbnailUrl()
         ).isEqualTo(
                 "https://signed.example/thumbnail.png"
         );
@@ -141,8 +156,12 @@ class DocumentServiceTests {
 
     @Test
     void allowsAssistantWithLectureMaterialPermissionToCreateDocument() {
-        UUID spaceId = UUID.randomUUID();
-        User user = user();
+
+        UUID spaceId =
+                UUID.randomUUID();
+
+        User user =
+                user();
 
         SpaceMember member =
                 approve(
@@ -155,9 +174,12 @@ class DocumentServiceTests {
                 permissionRepository
                         .existsBySpaceMemberIdAndPermission(
                                 member.getId(),
-                                PermissionType.LECTURE_MATERIAL_MANAGE
+                                PermissionType
+                                        .LECTURE_MATERIAL_MANAGE
                         )
-        ).thenReturn(true);
+        ).thenReturn(
+                true
+        );
 
         MultipartFile file =
                 mock(MultipartFile.class);
@@ -172,7 +194,9 @@ class DocumentServiceTests {
 
         when(
                 pdfProcessor.process(file)
-        ).thenReturn(processed);
+        ).thenReturn(
+                processed
+        );
 
         when(
                 documentRepository.save(
@@ -184,7 +208,9 @@ class DocumentServiceTests {
         );
 
         when(
-                storage.presignedGetUrl(any())
+                storage.presignedGetUrl(
+                        any()
+                )
         ).thenReturn(
                 "https://signed.example/thumbnail.png"
         );
@@ -228,12 +254,24 @@ class DocumentServiceTests {
                 member.getSpace(),
                 response.documentId()
         );
+
+        verify(
+                documentAiProcessingService,
+                never()
+        ).process(
+                any(),
+                any()
+        );
     }
 
     @Test
     void rejectsAssistantWithoutLectureMaterialPermission() {
-        UUID spaceId = UUID.randomUUID();
-        User user = user();
+
+        UUID spaceId =
+                UUID.randomUUID();
+
+        User user =
+                user();
 
         assertThatThrownBy(() ->
                 service.createDocument(
@@ -243,11 +281,17 @@ class DocumentServiceTests {
                         user
                 )
         )
-                .isInstanceOf(BusinessException.class)
-                .extracting(exception ->
-                        ((BusinessException) exception).getErrorCode()
+                .isInstanceOf(
+                        BusinessException.class
                 )
-                .isEqualTo(DocumentErrorCode.DOCUMENT_ACCESS_DENIED);
+                .extracting(exception ->
+                        ((BusinessException) exception)
+                                .getErrorCode()
+                )
+                .isEqualTo(
+                        DocumentErrorCode
+                                .DOCUMENT_ACCESS_DENIED
+                );
 
         verify(
                 pdfProcessor,
@@ -259,9 +303,15 @@ class DocumentServiceTests {
 
     @Test
     void returnsPresignedPdfAndCreatesRecentView() {
-        UUID spaceId = UUID.randomUUID();
-        UUID documentId = UUID.randomUUID();
-        User user = user();
+
+        UUID spaceId =
+                UUID.randomUUID();
+
+        UUID documentId =
+                UUID.randomUUID();
+
+        User user =
+                user();
 
         approve(
                 spaceId,
@@ -340,9 +390,15 @@ class DocumentServiceTests {
 
     @Test
     void deletesSlidesBeforeDocumentAndCleansUpFilesOnlyAfterCommit() {
-        UUID spaceId = UUID.randomUUID();
-        UUID documentId = UUID.randomUUID();
-        User user = user();
+
+        UUID spaceId =
+                UUID.randomUUID();
+
+        UUID documentId =
+                UUID.randomUUID();
+
+        User user =
+                user();
 
         SpaceMember member =
                 approve(
@@ -437,16 +493,24 @@ class DocumentServiceTests {
                 .afterCommit();
 
         verify(storage)
-                .delete("original.pdf");
+                .delete(
+                        "original.pdf"
+                );
 
         verify(storage)
-                .delete("thumbnail.png");
+                .delete(
+                        "thumbnail.png"
+                );
 
         verify(storage)
-                .delete("slide-1.png");
+                .delete(
+                        "slide-1.png"
+                );
 
         verify(storage)
-                .delete("slide-2.png");
+                .delete(
+                        "slide-2.png"
+                );
     }
 
     private SpaceMember approve(
@@ -499,6 +563,7 @@ class DocumentServiceTests {
     }
 
     private User user() {
+
         User user =
                 mock(User.class);
 
