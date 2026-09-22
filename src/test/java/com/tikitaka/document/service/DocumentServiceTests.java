@@ -21,13 +21,16 @@ import org.springframework.web.multipart.MultipartFile;
 import com.tikitaka.document.dto.response.DocumentCreateResponse;
 import com.tikitaka.document.dto.response.DocumentDownloadResponse;
 import com.tikitaka.document.dto.response.DocumentListItemResponse;
+import com.tikitaka.document.dto.response.DocumentUpdateStatus;
 import com.tikitaka.document.entity.Document;
 import com.tikitaka.document.entity.Slide;
 import com.tikitaka.document.exception.DocumentErrorCode;
 import com.tikitaka.document.pdf.PdfProcessor;
 import com.tikitaka.document.pdf.ProcessedPdf;
 import com.tikitaka.document.repository.DocumentRepository;
+import com.tikitaka.document.repository.DocumentRevisionRepository;
 import com.tikitaka.document.repository.SlideRepository;
+import com.tikitaka.document.repository.projection.DocumentRevisionStatusProjection;
 import com.tikitaka.document.storage.DocumentStorage;
 import com.tikitaka.global.exception.BusinessException;
 import com.tikitaka.global.s3.S3FileValidator;
@@ -47,6 +50,9 @@ class DocumentServiceTests {
 
     private final DocumentRepository documentRepository =
             mock(DocumentRepository.class);
+
+    private final DocumentRevisionRepository revisionRepository =
+            mock(DocumentRevisionRepository.class);
 
     private final SlideRepository slideRepository =
             mock(SlideRepository.class);
@@ -78,6 +84,7 @@ class DocumentServiceTests {
     private final DocumentService service =
             new DocumentService(
                     documentRepository,
+                    revisionRepository,
                     slideRepository,
                     recentViewRepository,
                     memberRepository,
@@ -113,6 +120,10 @@ class DocumentServiceTests {
 
         Document document =
                 mock(Document.class);
+
+        UUID documentId = UUID.randomUUID();
+
+        when(document.getId()).thenReturn(documentId);
 
         when(
                 document.getThumbnailKey()
@@ -152,6 +163,84 @@ class DocumentServiceTests {
         ).isEqualTo(
                 "https://signed.example/thumbnail.png"
         );
+
+        assertThat(result.get(0).updateStatus())
+                .isEqualTo(DocumentUpdateStatus.ACTIVE);
+
+        assertThat(result.get(0).revisionId())
+                .isNull();
+    }
+
+    @Test
+    void returnsLatestRevisionProcessingStatus() {
+        UUID spaceId = UUID.randomUUID();
+        UUID documentId = UUID.randomUUID();
+        UUID revisionId = UUID.randomUUID();
+        User user = user();
+
+        approve(spaceId, user, SpaceMemberRole.STUDENT);
+
+        Document document = mock(Document.class);
+        DocumentRevisionStatusProjection revision =
+                mock(DocumentRevisionStatusProjection.class);
+
+        when(document.getId()).thenReturn(documentId);
+        when(document.getThumbnailKey()).thenReturn("documents/thumbnail.png");
+        when(documentRepository.findAllBySpaceIdOrderByCreatedAtDescIdDesc(spaceId))
+                .thenReturn(List.of(document));
+        when(revisionRepository.findLatestCompletionStatuses(List.of(documentId)))
+                .thenReturn(List.of(revision));
+        when(revision.getDocumentId()).thenReturn(documentId);
+        when(revision.getRevisionId()).thenReturn(revisionId);
+        when(revision.getStatus()).thenReturn("PROCESSING");
+
+        DocumentListItemResponse response =
+                service.getDocuments(spaceId, user).get(0);
+
+        assertThat(response.updateStatus())
+                .isEqualTo(DocumentUpdateStatus.PROCESSING);
+        assertThat(response.revisionId())
+                .isEqualTo(revisionId);
+    }
+
+    @Test
+    void mapsLatestTerminalRevisionStatus() {
+        UUID spaceId = UUID.randomUUID();
+        UUID documentId = UUID.randomUUID();
+        UUID revisionId = UUID.randomUUID();
+        User user = user();
+
+        approve(spaceId, user, SpaceMemberRole.STUDENT);
+
+        Document document = mock(Document.class);
+        DocumentRevisionStatusProjection revision =
+                mock(DocumentRevisionStatusProjection.class);
+
+        when(document.getId()).thenReturn(documentId);
+        when(document.getThumbnailKey()).thenReturn("documents/thumbnail.png");
+        when(documentRepository.findAllBySpaceIdOrderByCreatedAtDescIdDesc(spaceId))
+                .thenReturn(List.of(document));
+        when(revisionRepository.findLatestCompletionStatuses(List.of(documentId)))
+                .thenReturn(List.of(revision));
+        when(revision.getDocumentId()).thenReturn(documentId);
+        when(revision.getRevisionId()).thenReturn(revisionId);
+        when(revision.getStatus()).thenReturn("FAILED");
+
+        DocumentListItemResponse failed =
+                service.getDocuments(spaceId, user).get(0);
+
+        assertThat(failed.updateStatus())
+                .isEqualTo(DocumentUpdateStatus.FAILED);
+
+        when(revision.getStatus()).thenReturn("COMPLETED");
+
+        DocumentListItemResponse completed =
+                service.getDocuments(spaceId, user).get(0);
+
+        assertThat(completed.updateStatus())
+                .isEqualTo(DocumentUpdateStatus.ACTIVE);
+        assertThat(completed.revisionId())
+                .isEqualTo(revisionId);
     }
 
     @Test
