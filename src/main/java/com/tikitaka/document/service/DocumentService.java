@@ -2,10 +2,7 @@ package com.tikitaka.document.service;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
@@ -19,17 +16,13 @@ import com.tikitaka.document.dto.response.DocumentDownloadResponse;
 import com.tikitaka.document.dto.response.DocumentListItemResponse;
 import com.tikitaka.document.dto.response.DocumentSlideResponse;
 import com.tikitaka.document.dto.response.DocumentSlidesResponse;
-import com.tikitaka.document.dto.response.DocumentUpdateStatus;
 import com.tikitaka.document.entity.Document;
-import com.tikitaka.document.entity.RevisionStatus;
 import com.tikitaka.document.entity.Slide;
 import com.tikitaka.document.exception.DocumentErrorCode;
 import com.tikitaka.document.pdf.PdfProcessor;
 import com.tikitaka.document.pdf.ProcessedPdf;
 import com.tikitaka.document.repository.DocumentRepository;
-import com.tikitaka.document.repository.DocumentRevisionRepository;
 import com.tikitaka.document.repository.SlideRepository;
-import com.tikitaka.document.repository.projection.DocumentRevisionStatusProjection;
 import com.tikitaka.document.storage.DocumentStorage;
 import com.tikitaka.global.exception.BusinessException;
 import com.tikitaka.global.s3.FileUploadType;
@@ -56,7 +49,6 @@ import lombok.extern.slf4j.Slf4j;
 public class DocumentService {
 
     private final DocumentRepository documentRepository;
-    private final DocumentRevisionRepository documentRevisionRepository;
     private final SlideRepository slideRepository;
     private final RecentDocumentViewRepository recentDocumentViewRepository;
 
@@ -80,68 +72,23 @@ public class DocumentService {
                 currentUser
         );
 
-        List<Document> documents = documentRepository
+        return documentRepository
                 .findAllBySpaceIdOrderByCreatedAtDescIdDesc(
                         spaceId
-                );
-
-        if (documents.isEmpty()) {
-            return List.of();
-        }
-
-        Map<UUID, DocumentRevisionStatusProjection> latestStatuses =
-                documentRevisionRepository
-                        .findLatestCompletionStatuses(
-                                documents.stream()
-                                        .map(Document::getId)
-                                        .toList()
-                        )
-                        .stream()
-                        .collect(Collectors.toMap(
-                                DocumentRevisionStatusProjection::getDocumentId,
-                                Function.identity()
-                        ));
-
-        return documents.stream()
+                )
+                .stream()
                 .map(document ->
-                        documentListItem(
-                                document,
-                                latestStatuses.get(document.getId())
+                        new DocumentListItemResponse(
+                                document.getId(),
+                                document.getTitle(),
+                                storage.presignedGetUrl(
+                                        document.getThumbnailKey()
+                                ),
+                                document.getPageCount(),
+                                document.getCreatedAt()
                         )
                 )
                 .toList();
-    }
-
-    private DocumentListItemResponse documentListItem(
-            Document document,
-            DocumentRevisionStatusProjection revision
-    ) {
-        return new DocumentListItemResponse(
-                document.getId(),
-                document.getTitle(),
-                storage.presignedGetUrl(document.getThumbnailKey()),
-                document.getPageCount(),
-                document.getCreatedAt(),
-                updateStatus(revision),
-                revision == null ? null : revision.getRevisionId()
-        );
-    }
-
-    private DocumentUpdateStatus updateStatus(
-            DocumentRevisionStatusProjection revision
-    ) {
-        if (revision == null) {
-            return DocumentUpdateStatus.ACTIVE;
-        }
-
-        return switch (RevisionStatus.valueOf(revision.getStatus())) {
-            case PROCESSING -> DocumentUpdateStatus.PROCESSING;
-            case FAILED -> DocumentUpdateStatus.FAILED;
-            case COMPLETED -> DocumentUpdateStatus.ACTIVE;
-            default -> throw new IllegalStateException(
-                    "Unexpected completion status: " + revision.getStatus()
-            );
-        };
     }
 
     @Transactional
