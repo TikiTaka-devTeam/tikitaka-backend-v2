@@ -38,7 +38,7 @@ public class DocumentController {
     private final DocumentService documentService;
     private final CurrentUserResolver currentUserResolver;
 
-    @Operation(summary = "MAT-001 강의자료 목록 조회")
+    @Operation(summary = "MAT-001 강의자료 목록 조회", description = "강의자료 목록과 가장 최근 수정 반영 상태를 조회합니다.")
     @GetMapping("/api/v1/spaces/{spaceId}/documents")
     public List<DocumentListItemResponse> getDocuments(
             @PathVariable UUID spaceId,
