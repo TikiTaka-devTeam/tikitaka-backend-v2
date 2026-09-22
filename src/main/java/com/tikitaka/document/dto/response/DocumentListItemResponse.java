@@ -8,6 +8,8 @@ public record DocumentListItemResponse(
         String title,
         String thumbnailUrl,
         Integer pageCount,
-        Instant uploadedAt
+        Instant uploadedAt,
+        DocumentUpdateStatus updateStatus,
+        UUID revisionId
 ) {
 }
