@@ -14,7 +14,6 @@ import jakarta.persistence.LockModeType;
 
 import com.tikitaka.document.entity.DocumentRevision;
 import com.tikitaka.document.entity.RevisionStatus;
-import com.tikitaka.document.repository.projection.DocumentRevisionStatusProjection;
 
 public interface DocumentRevisionRepository
         extends JpaRepository<DocumentRevision, UUID> {
@@ -52,24 +51,4 @@ public interface DocumentRevisionRepository
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select revision from DocumentRevision revision where revision.id = :revisionId")
     Optional<DocumentRevision> findByIdForUpdate(@Param("revisionId") UUID revisionId);
-
-    @Query(
-            value = """
-                    SELECT DISTINCT ON (revision.document_id)
-                        revision.id AS "revisionId",
-                        revision.document_id AS "documentId",
-                        revision.status AS status
-                    FROM document_revisions revision
-                    WHERE revision.document_id IN (:documentIds)
-                      AND revision.status IN ('PROCESSING', 'COMPLETED', 'FAILED')
-                    ORDER BY
-                        revision.document_id,
-                        revision.created_at DESC,
-                        revision.id DESC
-                    """,
-            nativeQuery = true
-    )
-    List<DocumentRevisionStatusProjection> findLatestCompletionStatuses(
-            @Param("documentIds") List<UUID> documentIds
-    );
 }
