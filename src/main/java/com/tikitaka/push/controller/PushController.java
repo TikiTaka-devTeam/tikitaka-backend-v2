@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.tikitaka.global.config.OpenApiConfig;
 import com.tikitaka.global.security.CurrentUserResolver;
+import com.tikitaka.push.dto.request.PushEndpointRequest;
 import com.tikitaka.push.dto.request.PushSubscriptionRequest;
 import com.tikitaka.push.dto.response.PushDeleteResponse;
 import com.tikitaka.push.dto.response.PushSubscriptionResponse;
@@ -50,7 +51,7 @@ public class PushController {
 
     @Operation(
             summary = "PUSH-002 Push Subscription 등록",
-            description = "현재 로그인 사용자의 브라우저 Web Push 구독 정보를 등록합니다."
+            description = "현재 로그인 사용자의 브라우저 Web Push 구독 정보를 등록하거나 동일 endpoint 구독을 현재 사용자로 갱신합니다."
     )
     @PostMapping("/subscriptions")
     public PushSubscriptionResponse subscribe(
@@ -74,6 +75,21 @@ public class PushController {
     ) {
         return pushSubscriptionService.unsubscribe(
                 subscriptionId,
+                currentUserResolver.resolve(authentication)
+        );
+    }
+
+    @Operation(
+            summary = "PUSH-004 Push Subscription endpoint 기반 삭제",
+            description = "현재 로그인 사용자의 endpoint 기준 Web Push 구독 정보를 삭제합니다."
+    )
+    @DeleteMapping("/subscriptions")
+    public PushDeleteResponse unsubscribeByEndpoint(
+            @Valid @RequestBody PushEndpointRequest request,
+            Authentication authentication
+    ) {
+        return pushSubscriptionService.unsubscribeByEndpoint(
+                request,
                 currentUserResolver.resolve(authentication)
         );
     }

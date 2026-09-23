@@ -6,6 +6,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.tikitaka.global.exception.BusinessException;
+import com.tikitaka.push.dto.request.PushEndpointRequest;
 import com.tikitaka.push.dto.request.PushSubscriptionRequest;
 import com.tikitaka.push.dto.response.PushDeleteResponse;
 import com.tikitaka.push.dto.response.PushSubscriptionResponse;
@@ -28,16 +29,17 @@ public class PushSubscriptionService {
             PushSubscriptionRequest request,
             User currentUser
     ) {
+        pushSubscriptionRepository.upsertByEndpoint(
+                currentUser.getId(),
+                request.endpoint(),
+                request.keys().p256dh(),
+                request.keys().auth()
+        );
+
         PushSubscription subscription = pushSubscriptionRepository
                 .findByEndpoint(request.endpoint())
-                .map(existing -> updateExisting(existing, request, currentUser))
-                .orElseGet(() -> pushSubscriptionRepository.save(
-                        PushSubscription.create(
-                                currentUser,
-                                request.endpoint(),
-                                request.keys().p256dh(),
-                                request.keys().auth()
-                        )
+                .orElseThrow(() -> new BusinessException(
+                        PushErrorCode.PUSH_SUBSCRIPTION_NOT_FOUND
                 ));
 
         return new PushSubscriptionResponse(
@@ -62,22 +64,22 @@ public class PushSubscriptionService {
         return new PushDeleteResponse("Push 구독이 해제되었습니다.");
     }
 
-    private PushSubscription updateExisting(
-            PushSubscription existing,
-            PushSubscriptionRequest request,
+    @Transactional
+    public PushDeleteResponse unsubscribeByEndpoint(
+            PushEndpointRequest request,
             User currentUser
     ) {
-        if (!existing.getUser().getId().equals(currentUser.getId())) {
-            throw new BusinessException(
-                    PushErrorCode.PUSH_ENDPOINT_ALREADY_REGISTERED
-            );
-        }
+        PushSubscription subscription = pushSubscriptionRepository
+                .findByEndpointAndUserId(
+                        request.endpoint(),
+                        currentUser.getId()
+                )
+                .orElseThrow(() -> new BusinessException(
+                        PushErrorCode.PUSH_SUBSCRIPTION_NOT_FOUND
+                ));
 
-        existing.updateKeys(
-                request.keys().p256dh(),
-                request.keys().auth()
-        );
+        pushSubscriptionRepository.delete(subscription);
 
-        return existing;
+        return new PushDeleteResponse("Push 구독이 해제되었습니다.");
     }
 }
