@@ -123,7 +123,8 @@ public class CategoryQuestionRemappingService {
                 .stream()
                 .map(category -> new CategorySnapshot(
                         category.getId(),
-                        category.getName()
+                        category.getName(),
+                        category.getDescription()
                 ))
                 .toList();
 
@@ -155,7 +156,8 @@ public class CategoryQuestionRemappingService {
                 .stream()
                 .map(category -> new QuestionAnalyzeRequest.CategoryCandidate(
                         category.categoryId(),
-                        category.name()
+                        category.name(),
+                        category.description()
                 ))
                 .toList();
 
@@ -212,7 +214,8 @@ public class CategoryQuestionRemappingService {
 
     private record CategorySnapshot(
             UUID categoryId,
-            String name
+            String name,
+            String description
     ) {
     }
 

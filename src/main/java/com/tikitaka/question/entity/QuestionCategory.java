@@ -43,6 +43,9 @@ public class QuestionCategory extends BaseTimeEntity {
     @Column(nullable = false, length = 100)
     private String name;
 
+    @Column(length = 255)
+    private String description;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "created_by")
     private User createdBy;
@@ -72,12 +75,14 @@ public class QuestionCategory extends BaseTimeEntity {
     private QuestionCategory(
             Document document,
             String name,
+            String description,
             User createdBy,
             CategorySourceType sourceType,
             List<Integer> sourcePages
     ) {
         this.document = document;
         this.name = name;
+        this.description = description;
         this.createdBy = createdBy;
         this.sourceType = sourceType;
 
@@ -95,6 +100,7 @@ public class QuestionCategory extends BaseTimeEntity {
         return new QuestionCategory(
                 document,
                 name,
+                null,
                 createdBy,
                 CategorySourceType.MANUAL,
                 null
@@ -104,11 +110,13 @@ public class QuestionCategory extends BaseTimeEntity {
     public static QuestionCategory createByAi(
             Document document,
             String name,
+            String description,
             List<Integer> sourcePages
     ) {
         return new QuestionCategory(
                 document,
                 name,
+                description,
                 null,
                 CategorySourceType.AI,
                 sourcePages
@@ -121,13 +129,15 @@ public class QuestionCategory extends BaseTimeEntity {
         this.name = name;
     }
 
-    public void updateAiSourcePages(
+    public void updateAiMetadata(
+            String description,
             List<Integer> sourcePages
     ) {
         if (sourceType != CategorySourceType.AI) {
             return;
         }
 
+        this.description = description;
         this.sourcePages =
                 sourcePages == null
                         ? null
