@@ -146,7 +146,9 @@ public class QuestionAiProcessingService {
                                                                     category
                                                                             .getId(),
                                                                     category
-                                                                            .getName()
+                                                                            .getName(),
+                                                                    category
+                                                                            .getDescription()
                                                             )
                                             )
                                             .toList();

@@ -12,12 +12,6 @@ public enum PushErrorCode implements ErrorCode {
             "Push 구독 정보를 찾을 수 없습니다."
     ),
 
-    PUSH_ENDPOINT_ALREADY_REGISTERED(
-            HttpStatus.CONFLICT,
-            "PUSH_ENDPOINT_ALREADY_REGISTERED",
-            "이미 다른 사용자에게 등록된 Push endpoint입니다."
-    ),
-
     WEB_PUSH_NOT_CONFIGURED(
             HttpStatus.SERVICE_UNAVAILABLE,
             "WEB_PUSH_NOT_CONFIGURED",

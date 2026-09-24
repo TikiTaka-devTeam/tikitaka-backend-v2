@@ -8,6 +8,8 @@ public record DocumentCategoryResult(
 
         String name,
 
+        String description,
+
         @JsonProperty("source_pages")
         List<Integer> sourcePages
 ) {

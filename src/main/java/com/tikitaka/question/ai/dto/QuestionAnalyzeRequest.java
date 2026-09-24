@@ -28,7 +28,9 @@ public record QuestionAnalyzeRequest(
             @JsonProperty("category_id")
             UUID categoryId,
 
-            String name
+            String name,
+
+            String description
     ) {
     }
 }
