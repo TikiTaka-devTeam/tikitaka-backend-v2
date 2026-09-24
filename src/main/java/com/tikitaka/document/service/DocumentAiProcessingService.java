@@ -169,6 +169,7 @@ public class DocumentAiProcessingService {
                     ),
                     new DocumentCategoryResult(
                             normalizedName,
+                            result.description(),
                             result.sourcePages()
                     )
             );
@@ -215,7 +216,10 @@ public class DocumentAiProcessingService {
                         existing.getSourceType()
                                 == CategorySourceType.AI
                 ) {
-                    existing.updateAiSourcePages(
+                    existing.updateAiMetadata(
+                            entry
+                                    .getValue()
+                                    .description(),
                             entry
                                     .getValue()
                                     .sourcePages()
@@ -230,6 +234,8 @@ public class DocumentAiProcessingService {
                             document,
                             entry.getValue()
                                     .name(),
+                            entry.getValue()
+                                    .description(),
                             entry.getValue()
                                     .sourcePages()
                     );
