@@ -114,6 +114,10 @@ public class QuestionService {
             requireDocument(documentId, spaceId);
         }
 
+        if (categoryId != null) {
+            requireCategoryInScope(categoryId, spaceId, documentId);
+        }
+
         int pageSize = size(size);
         int offset = offset(cursor);
 
@@ -1624,6 +1628,28 @@ public class QuestionService {
                                         .CATEGORY_NOT_FOUND
                         )
                 );
+    }
+
+    private QuestionCategory requireCategoryInScope(
+            UUID categoryId,
+            UUID spaceId,
+            UUID documentId
+    ) {
+        return categories
+                .findById(categoryId)
+                .filter(category ->
+                        !category.isDeleted()
+                                && category.getDocument()
+                                .getSpace()
+                                .getId()
+                                .equals(spaceId)
+                                && (documentId == null
+                                || category.getDocument()
+                                .getId()
+                                .equals(documentId))
+                )
+                .orElseThrow(() -> new BusinessException(
+                        QuestionErrorCode.CATEGORY_NOT_FOUND));
     }
 
     private String name(
