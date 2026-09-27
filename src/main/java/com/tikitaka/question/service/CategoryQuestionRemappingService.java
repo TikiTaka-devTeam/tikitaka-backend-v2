@@ -65,9 +65,16 @@ public class CategoryQuestionRemappingService {
     public void scheduleRecalculation(
             UUID documentId
     ) {
+        scheduleRecalculation(documentId, null);
+    }
+
+    public void scheduleRecalculation(
+            UUID documentId,
+            UUID excludedQuestionId
+    ) {
         Runnable submitTask = () ->
                 taskExecutor.execute(
-                        () -> runSafely(documentId)
+                        () -> runSafely(documentId, excludedQuestionId)
                 );
 
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
@@ -86,10 +93,11 @@ public class CategoryQuestionRemappingService {
     }
 
     private void runSafely(
-            UUID documentId
+            UUID documentId,
+            UUID excludedQuestionId
     ) {
         try {
-            recalculate(documentId);
+            recalculate(documentId, excludedQuestionId);
         } catch (RuntimeException exception) {
             log.warn(
                     "Question category remapping failed. documentId={}",
@@ -100,7 +108,8 @@ public class CategoryQuestionRemappingService {
     }
 
     private void recalculate(
-            UUID documentId
+            UUID documentId,
+            UUID excludedQuestionId
     ) {
         RemappingSnapshot snapshot = transactionTemplate.execute(
                 status -> loadSnapshot(documentId)
@@ -110,7 +119,9 @@ public class CategoryQuestionRemappingService {
             return;
         }
 
-        for (QuestionSnapshot question : snapshot.questions()) {
+        for (QuestionSnapshot question : snapshot.questions().stream()
+                .filter(question -> !question.questionId().equals(excludedQuestionId))
+                .toList()) {
             recalculateOne(question, snapshot);
         }
     }

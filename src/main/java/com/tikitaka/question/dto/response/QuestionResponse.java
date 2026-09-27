@@ -44,6 +44,8 @@ public final class QuestionResponse { private QuestionResponse() {}
    @JsonProperty("temp_id") String tempId, @JsonProperty("category_id") UUID categoryId, String name, String status) {}
  public record CategoryBatchResponse(List<CategoryResult> results, @JsonProperty("saved_at") Instant savedAt) {}
  public record CategoryMutation(@JsonProperty("category_id") UUID categoryId, @JsonProperty("document_id") UUID documentId, String name, String source) {}
+ public record QuestionCategoryMutation(@JsonProperty("question_id") UUID questionId, @JsonProperty("category_id") UUID categoryId,
+   @JsonProperty("document_id") UUID documentId, String name, String source) {}
  public record CategorizedQuestion(@JsonProperty("question_id") UUID questionId, String title, String content, QuestionStatus status, @JsonProperty("like_count") Integer likeCount) {}
  public record CategoryGroup(@JsonProperty("category_id") UUID categoryId, String name, List<CategorizedQuestion> questions) {}
  public record CategorizedQuestionsResponse(@JsonProperty("document_id") UUID documentId, List<CategoryGroup> categories) {}
