@@ -340,6 +340,30 @@ public class QuestionController {
         );
     }
 
+    @Operation(summary = "QST-025 특정 질문 카테고리 추가")
+    @PostMapping("/api/v1/questions/{questionId}/categories")
+    public QuestionCategoryMutation createQuestionCategory(
+            @PathVariable UUID questionId,
+            @Valid @RequestBody CategoryCreateRequest request,
+            Authentication authentication
+    ) {
+        return questionService.createQuestionCategory(
+                questionId, request, currentUserResolver.resolve(authentication)
+        );
+    }
+
+    @Operation(summary = "QST-026 특정 질문 카테고리 삭제")
+    @DeleteMapping("/api/v1/questions/{questionId}/categories/{categoryId}")
+    public QuestionCategoryMutation deleteQuestionCategory(
+            @PathVariable UUID questionId,
+            @PathVariable UUID categoryId,
+            Authentication authentication
+    ) {
+        return questionService.deleteQuestionCategory(
+                questionId, categoryId, currentUserResolver.resolve(authentication)
+        );
+    }
+
     @Operation(summary = "QST-024 카테고리별 질문 묶음 조회")
     @GetMapping("/api/v1/documents/{documentId}/categorized-questions")
     public CategorizedQuestionsResponse categorizedQuestions(
