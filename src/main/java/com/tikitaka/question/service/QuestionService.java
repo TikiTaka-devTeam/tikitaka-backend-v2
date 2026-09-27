@@ -30,6 +30,7 @@ import com.tikitaka.question.dto.request.SpaceQuestionCreateRequest;
 import com.tikitaka.question.entity.Answer;
 import com.tikitaka.question.entity.Question;
 import com.tikitaka.question.entity.QuestionCategory;
+import com.tikitaka.question.entity.QuestionCategoryMapping;
 import com.tikitaka.question.entity.QuestionComment;
 import com.tikitaka.question.entity.QuestionLike;
 import com.tikitaka.question.entity.QuestionStatus;
@@ -1016,6 +1017,64 @@ public class QuestionService {
 
         return new CategoryMutation(
                 category.getId(), category.getDocument().getId(), category.getName(), category.getSourceType().name()
+        );
+    }
+
+    @Transactional
+    public QuestionCategoryMutation createQuestionCategory(
+            UUID questionId,
+            CategoryCreateRequest request,
+            User user
+    ) {
+        Question question = getQuestion(questionId);
+        Document document = question.getDocument();
+        requireManager(document.getSpace().getId(), user);
+
+        String categoryName = name(request.name());
+        if (categories.existsByDocumentIdAndNameAndDeletedFalse(
+                document.getId(), categoryName)) {
+            fail(QuestionErrorCode.CATEGORY_DUPLICATED);
+        }
+
+        QuestionCategory category = categories.save(
+                QuestionCategory.createManual(document, categoryName, user)
+        );
+        mappings.save(QuestionCategoryMapping.create(question, category));
+
+        categoryQuestionRemappingService.scheduleRecalculation(
+                document.getId(), questionId
+        );
+
+        return new QuestionCategoryMutation(
+                questionId,
+                category.getId(),
+                document.getId(),
+                category.getName(),
+                category.getSourceType().name()
+        );
+    }
+
+    @Transactional
+    public QuestionCategoryMutation deleteQuestionCategory(
+            UUID questionId,
+            UUID categoryId,
+            User user
+    ) {
+        Question question = getQuestion(questionId);
+        Document document = question.getDocument();
+        requireManager(document.getSpace().getId(), user);
+
+        QuestionCategory category = getCategory(categoryId, document.getId());
+        mappings.findAllByQuestionId(questionId).stream()
+                .filter(mapping -> mapping.getCategory().getId().equals(categoryId))
+                .forEach(mappings::delete);
+
+        return new QuestionCategoryMutation(
+                questionId,
+                category.getId(),
+                document.getId(),
+                category.getName(),
+                category.getSourceType().name()
         );
     }
 
