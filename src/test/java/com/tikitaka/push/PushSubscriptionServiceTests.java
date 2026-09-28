@@ -36,7 +36,8 @@ class PushSubscriptionServiceTests {
         PushSubscription subscription = mock(PushSubscription.class);
         PushSubscriptionRequest request = new PushSubscriptionRequest(
                 endpoint,
-                new PushSubscriptionRequest.Keys("p256dh", "auth")
+                "p256dh",
+                "auth"
         );
 
         when(user.getId()).thenReturn(userId);
