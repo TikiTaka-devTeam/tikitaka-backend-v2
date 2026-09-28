@@ -17,11 +17,13 @@ import com.tikitaka.note.dto.response.StrokeSyncResponse.CreatedStroke;
 import com.tikitaka.note.entity.*;
 import com.tikitaka.note.exception.NoteErrorCode;
 import com.tikitaka.note.repository.*;
+import com.tikitaka.note.websocket.SharedStrokesCommittedEvent;
 import com.tikitaka.space.entity.*;
 import com.tikitaka.space.repository.*;
 import com.tikitaka.user.entity.User;
 import jakarta.validation.Validator;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
@@ -40,6 +42,7 @@ public class NoteService {
     private final SharedStrokeOperationRepository sharedOperations;
     private final Validator validator;
     private final FixerRepository fixers;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public StrokeLayerResponse getPrivate(UUID slideId, User user) {
@@ -67,19 +70,28 @@ public class NoteService {
         validate(request);
         privateLayers.ensureExists(slideId, user.getId());
         PrivateLayer layer = privateLayers.findForUpdate(slideId, user.getId()).orElseThrow();
-        return sync(slideId, request, false, layer.getId(), layer.getVersion(), layer::increaseVersion);
+        return sync(slideId, request, false, layer.getId(), layer.getVersion(), layer::increaseVersion)
+                .response();
     }
 
     @Transactional
     public StrokeSyncResponse syncShared(UUID slideId, StrokeSyncRequest request, User user) {
-        requireAccess(slideId, user, true, true);
+        Slide slide = requireAccess(slideId, user, true, true);
         validate(request);
         sharedLayers.ensureExists(slideId);
         SharedLayer layer = sharedLayers.findForUpdate(slideId).orElseThrow();
-        return sync(slideId, request, true, layer.getId(), layer.getVersion(), layer::increaseVersion);
+        SyncExecution execution = sync(slideId, request, true, layer.getId(), layer.getVersion(),
+                layer::increaseVersion);
+        if (execution.response().appliedCount() > 0) {
+            eventPublisher.publishEvent(new SharedStrokesCommittedEvent(
+                    slide.getDocument().getSpace().getId(), slideId,
+                    execution.response().version(), execution.createdStrokes(),
+                    execution.deletedStrokeIds()));
+        }
+        return execution.response();
     }
 
-    private StrokeSyncResponse sync(UUID slideId, StrokeSyncRequest request, boolean shared,
+    private SyncExecution sync(UUID slideId, StrokeSyncRequest request, boolean shared,
             UUID layerId, int version, Runnable increaseVersion) {
         List<UUID> ids = request.operations().stream().map(Operation::clientOperationId).toList();
         List<? extends StrokeOperationRecord> records = shared
@@ -94,14 +106,8 @@ public class NoteService {
             }
         }
         Set<UUID> operationIdsToApply = new HashSet<>();
-        Set<UUID> deleteTargets = new HashSet<>();
         for (Operation operation : request.operations()) {
             if (existing.containsKey(operation.clientOperationId())) continue;
-            if (operation.type() == Type.DELETE
-                    && (isDeleted(operation.strokeId(), layerId, shared)
-                    || !deleteTargets.add(operation.strokeId()))) {
-                continue;
-            }
             operationIdsToApply.add(operation.clientOperationId());
         }
         int applied = operationIdsToApply.size();
@@ -113,6 +119,8 @@ public class NoteService {
         }
         int resultVersion = applied > 0 ? version + 1 : version;
         List<CreatedStroke> created = new ArrayList<>();
+        List<SharedStrokesCommittedEvent.CreatedStroke> newlyCreated = new ArrayList<>();
+        List<UUID> newlyDeleted = new ArrayList<>();
         for (Operation operation : request.operations()) {
             StrokeOperationRecord prior = existing.get(operation.clientOperationId());
             UUID strokeId;
@@ -128,24 +136,21 @@ public class NoteService {
                     privateOperations.saveAndFlush(new PrivateStrokeOperation(layerId,
                             operation.clientOperationId(), operation.payload(), strokeId, resultVersion));
                 }
+                if (shared && operation.type() == Type.CREATE) {
+                    newlyCreated.add(SharedStrokesCommittedEvent.CreatedStroke.of(
+                            operation.stroke(), strokeId));
+                } else if (shared && operation.type() == Type.DELETE) {
+                    newlyDeleted.add(strokeId);
+                }
             }
             if (operation.type() == Type.CREATE) {
                 created.add(new CreatedStroke(operation.stroke().clientStrokeId(), strokeId));
             }
         }
         if (applied > 0) increaseVersion.run();
-        return new StrokeSyncResponse(slideId, resultVersion, applied, List.copyOf(created));
-    }
-
-    private boolean isDeleted(UUID strokeId, UUID layerId, boolean shared) {
-        if (shared) {
-            return sharedStrokes.findByIdAndLayerId(strokeId, layerId)
-                    .map(SharedStroke::isDeleted)
-                    .orElseThrow(() -> new BusinessException(NoteErrorCode.NOTE_STROKE_NOT_FOUND));
-        }
-        return privateStrokes.findByIdAndLayerId(strokeId, layerId)
-                .map(PrivateStroke::isDeleted)
-                .orElseThrow(() -> new BusinessException(NoteErrorCode.NOTE_STROKE_NOT_FOUND));
+        return new SyncExecution(
+                new StrokeSyncResponse(slideId, resultVersion, applied, List.copyOf(created)),
+                List.copyOf(newlyCreated), List.copyOf(newlyDeleted));
     }
 
     private UUID apply(Operation operation, UUID layerId, boolean shared) {
@@ -176,7 +181,7 @@ public class NoteService {
                 stroke.strokeOrder())).getId();
     }
 
-    private void requireAccess(UUID slideId, User user, boolean shared, boolean edit) {
+    private Slide requireAccess(UUID slideId, User user, boolean shared, boolean edit) {
         Slide slide = slideRepository.findById(slideId)
                 .orElseThrow(() -> new BusinessException(DocumentErrorCode.DOCUMENT_NOT_FOUND));
         SpaceMember member = memberRepository.findBySpaceIdAndUserIdAndStatusAndRemovedAtIsNull(
@@ -191,6 +196,7 @@ public class NoteService {
                         member.getId(), PermissionType.LECTURE_MATERIAL_MANAGE))) {
             throw new BusinessException(NoteErrorCode.NOTE_ACCESS_DENIED);
         }
+        return slide;
     }
 
     private void validate(StrokeSyncRequest request) {
@@ -261,5 +267,12 @@ public class NoteService {
         if (member.getRole() != SpaceMemberRole.PROFESSOR) {
             throw new BusinessException(NoteErrorCode.FIXER_ACCESS_DENIED);
         }
+    }
+
+    private record SyncExecution(
+            StrokeSyncResponse response,
+            List<SharedStrokesCommittedEvent.CreatedStroke> createdStrokes,
+            List<UUID> deletedStrokeIds
+    ) {
     }
 }

@@ -17,5 +17,7 @@ public interface SlideRepository extends JpaRepository<Slide, UUID> {
             Integer pageNumber
     );
 
+    boolean existsByIdAndDocumentSpaceId(UUID id, UUID spaceId);
+
     void deleteAllByDocumentId(UUID documentId);
 }

@@ -160,14 +160,14 @@ class NotePostgresIntegrationTests {
             pool.shutdownNow();
         }
     }
-    @Test void privateDeletionDoesNotChangeSharedLayerAndRepeatedDeleteIsNoOp() {
+    @Test void privateDeletionDoesNotChangeSharedLayerAndRepeatedDeleteIsRecorded() {
         var shared=notes.syncShared(slideId,request(0,create()),professor);
         var personal=notes.syncPrivate(slideId,request(0,create()),student);
         UUID strokeId=personal.createdStrokes().get(0).strokeId();
         notes.syncPrivate(slideId,request(1,new Operation(UUID.randomUUID(),Type.DELETE,null,strokeId)),student);
         var repeated=notes.syncPrivate(slideId,request(2,new Operation(UUID.randomUUID(),Type.DELETE,null,strokeId)),student);
-        assertThat(repeated.version()).isEqualTo(2); assertThat(repeated.appliedCount()).isZero();
-        assertThat(count("private_stroke_operations")).isEqualTo(2);
+        assertThat(repeated.version()).isEqualTo(3); assertThat(repeated.appliedCount()).isEqualTo(1);
+        assertThat(count("private_stroke_operations")).isEqualTo(3);
         assertThat(notes.getPrivate(slideId,student).strokes()).isEmpty();
         var teacherLayer=notes.getShared(slideId,student);
         assertThat(teacherLayer.version()).isEqualTo(shared.version()); assertThat(teacherLayer.strokes()).hasSize(1);

@@ -12,6 +12,7 @@ import com.tikitaka.note.dto.request.StrokeSyncRequest.*;
 import com.tikitaka.note.entity.*;
 import com.tikitaka.note.exception.NoteErrorCode;
 import com.tikitaka.note.repository.*;
+import com.tikitaka.note.websocket.SharedStrokesCommittedEvent;
 import com.tikitaka.space.entity.*;
 import com.tikitaka.space.repository.*;
 import com.tikitaka.user.entity.User;
@@ -19,6 +20,7 @@ import jakarta.validation.Validation;
 import jakarta.validation.ValidatorFactory;
 import org.junit.jupiter.api.*;
 import org.mockito.ArgumentCaptor;
+import org.springframework.context.ApplicationEventPublisher;
 
 class NoteServiceTests {
     static ValidatorFactory factory;
@@ -33,6 +35,7 @@ class NoteServiceTests {
     final SharedStrokeRepository sharedStrokes = mock(SharedStrokeRepository.class);
     final PrivateStrokeOperationRepository privateOps = mock(PrivateStrokeOperationRepository.class);
     final SharedStrokeOperationRepository sharedOps = mock(SharedStrokeOperationRepository.class);
+    final ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
     final User user = mock(User.class);
     final UUID slideId = UUID.randomUUID(), layerId = UUID.randomUUID(), spaceId = UUID.randomUUID();
     final SpaceMember member = mock(SpaceMember.class);
@@ -40,7 +43,8 @@ class NoteServiceTests {
     NoteService service;
     @BeforeEach void setup() {
         service = new NoteService(slides, members, permissions, privateLayers, sharedLayers,
-                privateStrokes, sharedStrokes, privateOps, sharedOps, factory.getValidator(), mock(FixerRepository.class));
+                privateStrokes, sharedStrokes, privateOps, sharedOps, factory.getValidator(),
+                mock(FixerRepository.class), eventPublisher);
         Slide slide = mock(Slide.class);
         Document document = mock(Document.class);
         Space space = mock(Space.class);
@@ -141,7 +145,7 @@ class NoteServiceTests {
         assertThat(layer.getVersion()).isZero();
         verify(privateOps, never()).saveAndFlush(any());
     }
-    @Test void deleteOfAlreadyDeletedStrokeIsNoOp() {
+    @Test void deleteOfAlreadyDeletedStrokeWithNewOperationIdIsRecorded() {
         UUID strokeId = UUID.randomUUID();
         PrivateStroke stroke = PrivateStroke.create(layer, StrokeTool.PEN,
                 List.of(Map.of("x_ratio", 0.1, "y_ratio", 0.2)), null, "#000000", 2.0, 1.0, 0);
@@ -151,9 +155,9 @@ class NoteServiceTests {
         var result = service.syncPrivate(slideId,
                 request(0, new Operation(UUID.randomUUID(), Type.DELETE, null, strokeId)), user);
 
-        assertThat(result.appliedCount()).isZero();
-        assertThat(result.version()).isZero();
-        verify(privateOps, never()).saveAndFlush(any());
+        assertThat(result.appliedCount()).isEqualTo(1);
+        assertThat(result.version()).isEqualTo(1);
+        verify(privateOps).saveAndFlush(any());
     }
     @Test void reusedClientStrokeIdConflicts() {
         when(privateOps.existsByLayerIdAndClientStrokeId(eq(layerId), any())).thenReturn(true);
@@ -200,6 +204,10 @@ class NoteServiceTests {
         UUID strokeId = UUID.randomUUID();
         when(sharedStrokes.findByIdAndLayerId(strokeId,layerId)).thenReturn(Optional.of(mock(SharedStroke.class)));
         assertThat(service.syncShared(slideId,request(0,new Operation(UUID.randomUUID(),Type.DELETE,null,strokeId)),user).version()).isEqualTo(1);
+        ArgumentCaptor<SharedStrokesCommittedEvent> event = ArgumentCaptor.forClass(SharedStrokesCommittedEvent.class);
+        verify(eventPublisher).publishEvent(event.capture());
+        assertThat(event.getValue().deletedStrokeIds()).containsExactly(strokeId);
+        assertThat(event.getValue().version()).isEqualTo(1);
         verifyNoInteractions(privateLayers,privateStrokes,privateOps);
     }
     @Test void removedMemberCannotRetryPreviouslyAppliedOperation() {
