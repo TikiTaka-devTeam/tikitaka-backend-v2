@@ -7,6 +7,8 @@ import static org.mockito.Mockito.when;
 
 import com.tikitaka.global.security.AuthenticatedUser;
 import com.tikitaka.global.security.JwtProvider;
+import com.tikitaka.global.security.ValidatedAccessToken;
+import java.time.Instant;
 import com.tikitaka.user.repository.UserRepository;
 import java.util.List;
 import java.util.UUID;
@@ -23,17 +25,21 @@ class StompAccessInterceptorTests {
     private final JwtProvider jwtProvider = mock(JwtProvider.class);
     private final UserRepository users = mock(UserRepository.class);
     private final StrokeWebSocketAccessService access = mock(StrokeWebSocketAccessService.class);
+    private final WebSocketSessionRegistry sessions = mock(WebSocketSessionRegistry.class);
     private final StompAccessInterceptor interceptor =
-            new StompAccessInterceptor(jwtProvider, users, access);
+            new StompAccessInterceptor(jwtProvider, users, access, sessions);
     private final MessageChannel channel = mock(MessageChannel.class);
 
     @Test
     void connectAuthenticatesBearerTokenAndStoresPrincipal() {
         UUID userId = UUID.randomUUID();
-        when(jwtProvider.validateAccessToken("token")).thenReturn(userId);
+        Instant expiresAt = Instant.parse("2099-08-24T03:15:00Z");
+        when(jwtProvider.validateAccessTokenDetails("token"))
+                .thenReturn(new ValidatedAccessToken(userId, expiresAt));
         when(users.existsById(userId)).thenReturn(true);
         StompHeaderAccessor headers = StompHeaderAccessor.create(StompCommand.CONNECT);
         headers.setNativeHeader("Authorization", "Bearer token");
+        headers.setSessionId("session");
         Message<byte[]> message = message(headers);
 
         interceptor.preSend(message, channel);
@@ -41,6 +47,7 @@ class StompAccessInterceptorTests {
         assertThat(headers.getUser()).isInstanceOf(UsernamePasswordAuthenticationToken.class);
         assertThat(((AuthenticatedUser) ((UsernamePasswordAuthenticationToken) headers.getUser())
                 .getPrincipal()).userId()).isEqualTo(userId);
+        verify(sessions).authenticate("session", userId, expiresAt);
     }
 
     @Test

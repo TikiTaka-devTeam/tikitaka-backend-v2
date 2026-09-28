@@ -3,6 +3,7 @@ package com.tikitaka.space.service;
 import com.tikitaka.global.exception.BusinessException;
 import com.tikitaka.global.s3.S3Service;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.context.ApplicationEventPublisher;
 import com.tikitaka.space.dto.request.JoinRequestActionRequest;
 import com.tikitaka.space.dto.request.JoinSettingsRequest;
 import com.tikitaka.space.dto.request.RolePermissionsRequest;
@@ -46,6 +47,7 @@ public class SpaceMemberService {
     private final SpaceRepository spaceRepository;
     private final SpaceMemberRepository spaceMemberRepository;
     private final SpaceMemberPermissionRepository permissionRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     public MemberListResponse getMembers(
             UUID spaceId,
@@ -352,10 +354,7 @@ public class SpaceMemberService {
         if (actor.getRole()
                 == SpaceMemberRole.PROFESSOR) {
 
-            target.remove(
-                    Instant.now()
-            );
-
+            removeAndPublish(spaceId, target);
             return;
         }
 
@@ -365,16 +364,19 @@ public class SpaceMemberService {
                 && target.getRole()
                 == SpaceMemberRole.STUDENT) {
 
-            target.remove(
-                    Instant.now()
-            );
-
+            removeAndPublish(spaceId, target);
             return;
         }
 
         throw new BusinessException(
                 SpaceMemberErrorCode.MEMBER_MANAGE_FORBIDDEN
         );
+    }
+
+    private void removeAndPublish(UUID spaceId, SpaceMember target) {
+        target.remove(Instant.now());
+        eventPublisher.publishEvent(new SpaceMemberRemovedEvent(
+                spaceId, target.getUser().getId()));
     }
 
     /**

@@ -42,11 +42,16 @@ public class JwtProvider {
     }
 
     public UUID validateAccessToken(String token) {
-        return validate(token, TokenType.ACCESS);
+        return validateAccessTokenDetails(token).userId();
+    }
+
+    public ValidatedAccessToken validateAccessTokenDetails(String token) {
+        Claims claims = validateClaims(token, TokenType.ACCESS);
+        return new ValidatedAccessToken(subject(claims), claims.getExpiration().toInstant());
     }
 
     public UUID validateRefreshToken(String token) {
-        return validate(token, TokenType.REFRESH);
+        return subject(validateClaims(token, TokenType.REFRESH));
     }
 
     private String createToken(UUID userId, TokenType type, Instant issuedAt, Instant expiresAt) {
@@ -61,7 +66,7 @@ public class JwtProvider {
                 .compact();
     }
 
-    private UUID validate(String token, TokenType expectedType) {
+    private Claims validateClaims(String token, TokenType expectedType) {
         Claims claims = Jwts.parser()
                 .verifyWith(signingKey)
                 .requireIssuer(properties.issuer())
@@ -72,6 +77,10 @@ public class JwtProvider {
         if (!expectedType.name().equals(claims.get(TOKEN_TYPE_CLAIM, String.class))) {
             throw new JwtException("Unexpected token type");
         }
+        return claims;
+    }
+
+    private UUID subject(Claims claims) {
         try {
             return UUID.fromString(claims.getSubject());
         } catch (IllegalArgumentException | NullPointerException exception) {

@@ -2,6 +2,7 @@ package com.tikitaka.note.websocket;
 
 import com.tikitaka.global.security.AuthenticatedUser;
 import com.tikitaka.global.security.JwtProvider;
+import com.tikitaka.global.security.ValidatedAccessToken;
 import com.tikitaka.user.repository.UserRepository;
 import io.jsonwebtoken.JwtException;
 import java.security.Principal;
@@ -33,6 +34,7 @@ public class StompAccessInterceptor implements ChannelInterceptor {
     private final JwtProvider jwtProvider;
     private final UserRepository userRepository;
     private final StrokeWebSocketAccessService accessService;
+    private final WebSocketSessionRegistry sessionRegistry;
 
     @Override
     public Message<?> preSend(Message<?> message, MessageChannel channel) {
@@ -62,13 +64,19 @@ public class StompAccessInterceptor implements ChannelInterceptor {
             unauthorized();
         }
         try {
-            UUID userId = jwtProvider.validateAccessToken(authorization.substring(7));
-            if (!userRepository.existsById(userId)) {
+            ValidatedAccessToken token = jwtProvider.validateAccessTokenDetails(
+                    authorization.substring(7));
+            if (!userRepository.existsById(token.userId())) {
                 unauthorized();
             }
-            AuthenticatedUser principal = new AuthenticatedUser(userId);
+            String sessionId = accessor.getSessionId();
+            if (sessionId == null) {
+                unauthorized();
+            }
+            sessionRegistry.authenticate(sessionId, token.userId(), token.expiresAt());
+            AuthenticatedUser principal = new AuthenticatedUser(token.userId());
             accessor.setUser(new UsernamePasswordAuthenticationToken(principal, null, List.of()));
-        } catch (JwtException | IllegalArgumentException exception) {
+        } catch (JwtException | IllegalArgumentException | IllegalStateException exception) {
             unauthorized();
         }
     }

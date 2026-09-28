@@ -1,6 +1,7 @@
 package com.tikitaka.global.config;
 
 import com.tikitaka.note.websocket.StompAccessInterceptor;
+import com.tikitaka.note.websocket.ManagedWebSocketHandlerDecoratorFactory;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.messaging.simp.config.ChannelRegistration;
@@ -17,6 +18,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     private final CorsProperties corsProperties;
     private final StompAccessInterceptor stompAccessInterceptor;
+    private final ManagedWebSocketHandlerDecoratorFactory sessionDecoratorFactory;
 
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
@@ -55,6 +57,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
         registration
                 .setMessageSizeLimit(64 * 1024)
                 .setSendTimeLimit(10_000)
-                .setSendBufferSizeLimit(512 * 1024);
+                .setSendBufferSizeLimit(512 * 1024)
+                .addDecoratorFactory(sessionDecoratorFactory);
     }
 }

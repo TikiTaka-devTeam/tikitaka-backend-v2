@@ -3,6 +3,7 @@ package com.tikitaka.global.config;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 
 @Configuration
 public class AsyncConfig {
@@ -16,5 +17,14 @@ public class AsyncConfig {
         executor.setThreadNamePrefix("application-");
         executor.initialize();
         return executor;
+    }
+
+    @Bean(name = "webSocketSessionTaskScheduler", destroyMethod = "shutdown")
+    public ThreadPoolTaskScheduler webSocketSessionTaskScheduler() {
+        ThreadPoolTaskScheduler scheduler = new ThreadPoolTaskScheduler();
+        scheduler.setPoolSize(1);
+        scheduler.setThreadNamePrefix("websocket-session-");
+        scheduler.initialize();
+        return scheduler;
     }
 }
