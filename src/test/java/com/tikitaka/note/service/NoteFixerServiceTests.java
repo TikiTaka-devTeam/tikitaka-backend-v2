@@ -28,7 +28,7 @@ class NoteFixerServiceTests {
     final UUID slideId=UUID.randomUUID(), fixerId=UUID.randomUUID(), spaceId=UUID.randomUUID();
     NoteService service;
     @BeforeEach void setup() {
-        service=new NoteService(slides,members,mock(com.tikitaka.space.repository.SpaceMemberPermissionRepository.class), mock(PrivateLayerRepository.class),mock(SharedLayerRepository.class),mock(PrivateStrokeRepository.class),mock(SharedStrokeRepository.class),mock(PrivateStrokeOperationRepository.class),mock(SharedStrokeOperationRepository.class),factory.getValidator(),fixers);
+        service=new NoteService(slides,members,mock(com.tikitaka.space.repository.SpaceMemberPermissionRepository.class), mock(PrivateLayerRepository.class),mock(SharedLayerRepository.class),mock(PrivateStrokeRepository.class),mock(SharedStrokeRepository.class),mock(PrivateStrokeOperationRepository.class),mock(SharedStrokeOperationRepository.class),factory.getValidator(),fixers,mock(org.springframework.context.ApplicationEventPublisher.class));
         Document document=mock(Document.class); Space space=mock(Space.class);
         when(user.getId()).thenReturn(UUID.randomUUID());
         when(slide.getId()).thenReturn(slideId);
