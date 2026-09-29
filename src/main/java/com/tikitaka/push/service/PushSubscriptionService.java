@@ -32,8 +32,8 @@ public class PushSubscriptionService {
         pushSubscriptionRepository.upsertByEndpoint(
                 currentUser.getId(),
                 request.endpoint(),
-                request.keys().p256dh(),
-                request.keys().auth()
+                request.p256dh(),
+                request.auth()
         );
 
         PushSubscription subscription = pushSubscriptionRepository
