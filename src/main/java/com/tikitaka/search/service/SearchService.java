@@ -26,6 +26,7 @@ import com.tikitaka.search.dto.response.SearchResponse;
 @Service
 public class SearchService {
     private static final int CONTENT_PREVIEW_LENGTH = 100;
+    private static final int MAX_KEYWORD_LENGTH = 255;
 
     private final JdbcTemplate jdbcTemplate;
     private final DocumentStorage documentStorage;
@@ -105,7 +106,12 @@ public class SearchService {
         if (keyword == null || keyword.trim().isEmpty()) {
             throw new BusinessException(CommonErrorCode.INVALID_INPUT);
         }
-        return keyword.trim();
+        String normalized = keyword.trim();
+        if (normalized.codePointCount(0, normalized.length()) > MAX_KEYWORD_LENGTH) {
+            throw new BusinessException(CommonErrorCode.INVALID_INPUT);
+        }
+
+        return normalized;
     }
 
     private String containsPattern(String keyword) {
