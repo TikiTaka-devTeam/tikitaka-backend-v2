@@ -26,6 +26,9 @@ class JwtProviderTests {
         TokenPair pair = provider.issue(userId);
 
         assertThat(provider.validateAccessToken(pair.accessToken())).isEqualTo(userId);
+        assertThat(provider.validateAccessTokenDetails(pair.accessToken()))
+                .isEqualTo(new ValidatedAccessToken(
+                        userId, NOW.plus(Duration.ofMinutes(15))));
         assertThat(provider.validateRefreshToken(pair.refreshToken())).isEqualTo(userId);
         assertThat(pair.accessTokenExpiresAt()).isEqualTo(NOW.plus(Duration.ofMinutes(15)));
         assertThat(pair.refreshTokenExpiresAt()).isEqualTo(NOW.plus(Duration.ofDays(14)));
