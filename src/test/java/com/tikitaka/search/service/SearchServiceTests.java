@@ -94,4 +94,18 @@ class SearchServiceTests {
 
         verifyNoInteractions(jdbcTemplate, documentStorage);
     }
+
+    @Test
+    void rejectsKeywordLongerThanDatabaseLimit() {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        DocumentStorage documentStorage = mock(DocumentStorage.class);
+        SearchService service = new SearchService(jdbcTemplate, documentStorage);
+
+        assertThatExceptionOfType(BusinessException.class)
+                .isThrownBy(() -> service.search(UUID.randomUUID(), "a".repeat(256)))
+                .satisfies(exception -> assertThat(exception.getErrorCode())
+                        .isEqualTo(CommonErrorCode.INVALID_INPUT));
+
+        verifyNoInteractions(jdbcTemplate, documentStorage);
+    }
 }

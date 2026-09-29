@@ -16,6 +16,7 @@ import com.tikitaka.search.dto.response.SearchMessageResponse;
 import com.tikitaka.search.service.SearchHistoryService;
 
 import com.tikitaka.global.config.OpenApiConfig;
+import com.tikitaka.global.security.AuthenticatedUser;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -34,30 +35,36 @@ public class SearchHistoryController {
 
     @Operation(summary = "SCH-002 최근 검색어 조회", description = "본인의 최근 검색어를 최신 검색순으로 최대 10개 조회합니다.")
     @GetMapping("/recent")
-    public List<RecentSearchResponse> getRecentSearches(@AuthenticationPrincipal UUID userId) {
-        return searchHistoryService.getRecentSearches(userId);
+    public List<RecentSearchResponse> getRecentSearches(
+            @AuthenticationPrincipal AuthenticatedUser authenticatedUser
+    ) {
+        return searchHistoryService.getRecentSearches(authenticatedUser.userId());
     }
 
     @Operation(summary = "SCH-003 최근 검색어 개별 삭제", description = "검색 기록 ID에 해당하는 본인의 최근 검색어를 삭제합니다.")
     @DeleteMapping("/recent/{searchId}")
     public SearchMessageResponse deleteRecentSearch(
-            @AuthenticationPrincipal UUID userId,
+            @AuthenticationPrincipal AuthenticatedUser authenticatedUser,
             @Parameter(description = "삭제할 최근 검색 기록 ID", required = true)
             @PathVariable UUID searchId) {
-        searchHistoryService.deleteRecentSearch(userId, searchId);
+        searchHistoryService.deleteRecentSearch(authenticatedUser.userId(), searchId);
         return new SearchMessageResponse("검색 기록이 삭제되었습니다.");
     }
 
     @Operation(summary = "SCH-004 최근 검색어 전체 삭제", description = "본인의 최근 검색 기록을 모두 삭제합니다.")
     @DeleteMapping("/recent")
-    public SearchMessageResponse deleteAllRecentSearches(@AuthenticationPrincipal UUID userId) {
-        searchHistoryService.deleteAllRecentSearches(userId);
+    public SearchMessageResponse deleteAllRecentSearches(
+            @AuthenticationPrincipal AuthenticatedUser authenticatedUser
+    ) {
+        searchHistoryService.deleteAllRecentSearches(authenticatedUser.userId());
         return new SearchMessageResponse("검색 기록이 모두 삭제되었습니다.");
     }
 
     @Operation(summary = "SCH-005 최근 조회 항목 조회", description = "최근 열어본 강의자료와 질문을 최근 조회순으로 각각 최대 3개 조회합니다.")
     @GetMapping("/recent-items")
-    public RecentItemsResponse getRecentItems(@AuthenticationPrincipal UUID userId) {
-        return searchHistoryService.getRecentItems(userId);
+    public RecentItemsResponse getRecentItems(
+            @AuthenticationPrincipal AuthenticatedUser authenticatedUser
+    ) {
+        return searchHistoryService.getRecentItems(authenticatedUser.userId());
     }
 }
