@@ -14,6 +14,9 @@ import org.springframework.jdbc.core.RowCallbackHandler;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.tikitaka.document.storage.DocumentStorage;
+import com.tikitaka.global.exception.BusinessException;
+import com.tikitaka.global.exception.CommonErrorCode;
 import com.tikitaka.search.dto.response.SearchAnnouncementResponse;
 import com.tikitaka.search.dto.response.SearchCategoryResponse;
 import com.tikitaka.search.dto.response.SearchDocumentResponse;
@@ -25,9 +28,14 @@ public class SearchService {
     private static final int CONTENT_PREVIEW_LENGTH = 100;
 
     private final JdbcTemplate jdbcTemplate;
+    private final DocumentStorage documentStorage;
 
-    public SearchService(JdbcTemplate jdbcTemplate) {
+    public SearchService(
+            JdbcTemplate jdbcTemplate,
+            DocumentStorage documentStorage
+    ) {
         this.jdbcTemplate = jdbcTemplate;
+        this.documentStorage = documentStorage;
     }
 
     @Transactional
@@ -36,7 +44,7 @@ public class SearchService {
         saveRecentSearch(userId, keyword);
 
         List<SearchDocumentResponse> documents = jdbcTemplate.query("""
-                SELECT d.id, d.space_id, s.space_name, d.title, d.thumbnail_url, d.created_at
+                SELECT d.id, d.space_id, s.space_name, d.title, d.thumbnail_key, d.created_at
                 FROM documents d
                 JOIN spaces s ON s.id = d.space_id
                 WHERE d.title ILIKE ? ESCAPE '\\'
@@ -95,7 +103,7 @@ public class SearchService {
 
     private String normalizeKeyword(String keyword) {
         if (keyword == null || keyword.trim().isEmpty()) {
-            throw new IllegalArgumentException("검색어는 공백일 수 없습니다.");
+            throw new BusinessException(CommonErrorCode.INVALID_INPUT);
         }
         return keyword.trim();
     }
@@ -151,7 +159,8 @@ public class SearchService {
     private SearchDocumentResponse mapDocument(ResultSet rs, int rowNum) throws SQLException {
         return new SearchDocumentResponse(
                 rs.getObject("id", UUID.class), rs.getObject("space_id", UUID.class),
-                rs.getString("space_name"), rs.getString("title"), rs.getString("thumbnail_url"),
+                rs.getString("space_name"), rs.getString("title"),
+                documentStorage.presignedGetUrl(rs.getString("thumbnail_key")),
                 rs.getTimestamp("created_at").toInstant());
     }
 
