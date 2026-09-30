@@ -19,6 +19,7 @@ import com.tikitaka.document.entity.Document;
 import com.tikitaka.document.entity.Slide;
 import com.tikitaka.document.repository.DocumentRepository;
 import com.tikitaka.document.repository.SlideRepository;
+import com.tikitaka.document.storage.DocumentStorage;
 import com.tikitaka.global.common.cursor.CursorCodec;
 import com.tikitaka.global.exception.BusinessException;
 import com.tikitaka.question.dto.request.CategoryBatchRequest;
@@ -71,6 +72,7 @@ public class QuestionService {
     private final QuestionCategoryMappingRepository mappings;
     private final DocumentRepository documents;
     private final SlideRepository slides;
+    private final DocumentStorage documentStorage;
     private final SpaceMemberRepository members;
     private final SpaceMemberPermissionRepository permissions;
     private final CursorCodec cursorCodec;
@@ -1250,7 +1252,9 @@ public class QuestionService {
                 : new SlideInfo(
                         slide.getId(),
                         slide.getPageNumber(),
-                        slide.getThumbnailKey()
+                        documentStorage.presignedGetUrl(
+                                slide.getThumbnailKey()
+                        )
                 );
     }
 

@@ -18,6 +18,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import com.tikitaka.document.entity.Document;
 import com.tikitaka.document.repository.DocumentRepository;
 import com.tikitaka.document.repository.SlideRepository;
+import com.tikitaka.document.storage.DocumentStorage;
 import com.tikitaka.global.common.cursor.CursorCodec;
 import com.tikitaka.question.dto.request.CategoryCreateRequest;
 import com.tikitaka.question.entity.CategorySourceType;
@@ -57,6 +58,7 @@ class QuestionCategoryManagementTests {
             mappings,
             mock(DocumentRepository.class),
             mock(SlideRepository.class),
+            mock(DocumentStorage.class),
             members,
             mock(SpaceMemberPermissionRepository.class),
             mock(CursorCodec.class),

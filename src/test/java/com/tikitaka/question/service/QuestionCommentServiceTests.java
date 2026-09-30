@@ -17,8 +17,10 @@ import org.junit.jupiter.api.Test;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import com.tikitaka.document.entity.Document;
+import com.tikitaka.document.entity.Slide;
 import com.tikitaka.document.repository.DocumentRepository;
 import com.tikitaka.document.repository.SlideRepository;
+import com.tikitaka.document.storage.DocumentStorage;
 import com.tikitaka.global.common.cursor.CursorCodec;
 import com.tikitaka.global.exception.BusinessException;
 import com.tikitaka.question.dto.request.CommentCreateRequest;
@@ -52,6 +54,7 @@ class QuestionCommentServiceTests {
     private final QuestionCategoryMappingRepository mappings = mock(QuestionCategoryMappingRepository.class);
     private final DocumentRepository documents = mock(DocumentRepository.class);
     private final SlideRepository slides = mock(SlideRepository.class);
+    private final DocumentStorage storage = mock(DocumentStorage.class);
     private final SpaceMemberRepository members = mock(SpaceMemberRepository.class);
     private final SpaceMemberPermissionRepository permissions = mock(SpaceMemberPermissionRepository.class);
 
@@ -65,6 +68,7 @@ class QuestionCommentServiceTests {
             mappings,
             documents,
             slides,
+            storage,
             members,
             permissions,
             mock(CursorCodec.class),
@@ -211,6 +215,28 @@ class QuestionCommentServiceTests {
         assertThat(anonymousComment.author().userId()).isNull();
         assertThat(anonymousComment.author().name()).isEqualTo("질문자");
         assertThat(anonymousComment.author().profileUrl()).isNull();
+    }
+
+    @Test
+    void detailReturnsSignedSlideThumbnailUrl() {
+        User viewer = user(UUID.randomUUID());
+        approve(viewer, SpaceMemberRole.STUDENT, false);
+
+        Slide slide = mock(Slide.class);
+        UUID slideId = UUID.randomUUID();
+        when(slide.getId()).thenReturn(slideId);
+        when(slide.getPageNumber()).thenReturn(3);
+        when(slide.getThumbnailKey()).thenReturn("slides/page-3.png");
+        when(storage.presignedGetUrl("slides/page-3.png"))
+                .thenReturn("https://example.com/signed-slide.png");
+        when(question.getSlide()).thenReturn(slide);
+
+        var response = service.detail(questionId, viewer);
+
+        assertThat(response.slide().slideId()).isEqualTo(slideId);
+        assertThat(response.slide().pageNumber()).isEqualTo(3);
+        assertThat(response.slide().thumbnailUrl())
+                .isEqualTo("https://example.com/signed-slide.png");
     }
 
     private SpaceMember approve(
