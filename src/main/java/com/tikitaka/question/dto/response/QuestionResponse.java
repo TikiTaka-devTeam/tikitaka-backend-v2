@@ -17,7 +17,7 @@ public final class QuestionResponse { private QuestionResponse() {}
    @JsonProperty("like_count") Integer likeCount, QuestionStatus status) {}
  public record DocumentListResponse(List<DocumentListItem> questions, @JsonProperty("next_cursor") String nextCursor, @JsonProperty("has_next") boolean hasNext) {}
  public record AnswerInfo(@JsonProperty("answer_id") UUID answerId, AuthorInfo author, String content, @JsonProperty("created_at") Instant createdAt, @JsonProperty("updated_at") Instant updatedAt, @JsonProperty("answer_type") AnswerType answerType, String transcript) {}
- public record CommentInfo(@JsonProperty("comment_id") UUID commentId, @JsonProperty("parent_comment_id") UUID parentCommentId, AuthorInfo author, String content, @JsonProperty("created_at") Instant createdAt, @JsonProperty("updated_at") Instant updatedAt) {}
+ public record CommentInfo(@JsonProperty("comment_id") UUID commentId, @JsonProperty("parent_comment_id") UUID parentCommentId, AuthorInfo author, @JsonProperty("is_anonymous") boolean isAnonymous, String content, @JsonProperty("created_at") Instant createdAt, @JsonProperty("updated_at") Instant updatedAt) {}
  public record Detail(@JsonProperty("question_id") UUID questionId, String title, String content, DocumentInfo document, SlideInfo slide,
    List<CategoryInfo> categories, @JsonProperty("x_ratio") Double xRatio, @JsonProperty("y_ratio") Double yRatio,
    @JsonProperty("view_count") Integer viewCount, @JsonProperty("like_count") Integer likeCount, boolean liked,
@@ -34,7 +34,7 @@ public final class QuestionResponse { private QuestionResponse() {}
  public record AnswerMutation(@JsonProperty("answer_id") UUID answerId, @JsonProperty("question_id") UUID questionId, String content,
    @JsonProperty("created_at") Instant createdAt, @JsonProperty("updated_at") Instant updatedAt, @JsonProperty("is_deleted") Boolean deleted) {}
  public record CommentMutation(@JsonProperty("comment_id") UUID commentId, @JsonProperty("question_id") UUID questionId,
-   @JsonProperty("parent_comment_id") UUID parentCommentId, String content, @JsonProperty("created_at") Instant createdAt,
+   @JsonProperty("parent_comment_id") UUID parentCommentId, String content, @JsonProperty("is_anonymous") boolean isAnonymous, @JsonProperty("created_at") Instant createdAt,
    @JsonProperty("updated_at") Instant updatedAt, @JsonProperty("is_deleted") Boolean deleted) {}
  public record Like(@JsonProperty("question_id") UUID questionId, boolean liked, @JsonProperty("like_count") Integer likeCount) {}
  public record CategoryItem(@JsonProperty("category_id") UUID categoryId, String name, String source) {}
