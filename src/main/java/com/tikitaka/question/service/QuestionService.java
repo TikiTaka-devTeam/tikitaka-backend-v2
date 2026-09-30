@@ -665,12 +665,7 @@ public class QuestionService {
         Question question =
                 getQuestion(questionId);
 
-        requireManager(
-                question.getDocument()
-                        .getSpace()
-                        .getId(),
-                user
-        );
+        requireCommentWriter(question, user);
 
         QuestionComment parent =
                 request.parentCommentId() == null
@@ -1315,7 +1310,14 @@ public class QuestionService {
                         ? null
                         : comment.getParentComment()
                         .getId(),
-                author(comment.getAuthor()),
+                isAnonymous(comment)
+                        ? new AuthorInfo(
+                                null,
+                                "질문자",
+                                null
+                        )
+                        : author(comment.getAuthor()),
+                isAnonymous(comment),
                 comment.getContent(),
                 comment.getCreatedAt(),
                 comment.getUpdatedAt()
@@ -1334,12 +1336,22 @@ public class QuestionService {
                         : comment.getParentComment()
                         .getId(),
                 comment.getContent(),
+                isAnonymous(comment),
                 comment.getCreatedAt(),
                 deleted == null
                         ? Instant.now()
                         : comment.getUpdatedAt(),
                 deleted
         );
+    }
+
+    private boolean isAnonymous(
+            QuestionComment comment
+    ) {
+        return comment.getQuestion()
+                .getStudent()
+                .getId()
+                .equals(comment.getAuthor().getId());
     }
 
     private Comparator<Question> comparator(
@@ -1473,6 +1485,31 @@ public class QuestionService {
         }
 
         return member;
+    }
+
+    private void requireCommentWriter(
+            Question question,
+            User user
+    ) {
+        SpaceMember member = requireMember(
+                question.getDocument().getSpace().getId(),
+                user
+        );
+
+        boolean questionAuthor = question.getStudent()
+                .getId()
+                .equals(user.getId());
+
+        boolean manager = member.getRole() == SpaceMemberRole.PROFESSOR
+                || (member.getRole() == SpaceMemberRole.ASSISTANT
+                && permissions.existsBySpaceMemberIdAndPermission(
+                        member.getId(),
+                        PermissionType.QUESTION_MANAGE
+                ));
+
+        if (!questionAuthor && !manager) {
+            fail(QuestionErrorCode.COMMENT_CREATE_FORBIDDEN);
+        }
     }
 
     private void requireProfessor(
