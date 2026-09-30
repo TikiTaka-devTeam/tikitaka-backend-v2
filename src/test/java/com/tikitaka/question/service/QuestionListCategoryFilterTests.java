@@ -19,6 +19,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import com.tikitaka.document.entity.Document;
 import com.tikitaka.document.repository.DocumentRepository;
 import com.tikitaka.document.repository.SlideRepository;
+import com.tikitaka.document.storage.DocumentStorage;
 import com.tikitaka.global.common.cursor.CursorCodec;
 import com.tikitaka.global.exception.BusinessException;
 import com.tikitaka.question.entity.Question;
@@ -200,7 +201,8 @@ class QuestionListCategoryFilterTests {
             service = new QuestionService(
                     questions, mock(AnswerRepository.class), mock(QuestionCommentRepository.class),
                     mock(QuestionLikeRepository.class), mock(RecentQuestionViewRepository.class),
-                    categories, mappings, documents, mock(SlideRepository.class), members,
+                    categories, mappings, documents, mock(SlideRepository.class),
+                    mock(DocumentStorage.class), members,
                     mock(SpaceMemberPermissionRepository.class), cursorCodec,
                     mock(QuestionAiProcessingService.class), mock(SimilarQuestionService.class),
                     mock(CategoryQuestionRemappingService.class), mock(TransactionTemplate.class));

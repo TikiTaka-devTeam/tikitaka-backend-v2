@@ -13,6 +13,7 @@ public enum QuestionErrorCode implements ErrorCode {
     SPACE_MEMBER_REQUIRED(HttpStatus.FORBIDDEN, "QUESTION_SPACE_MEMBER_REQUIRED", "해당 강의의 참여자만 이용할 수 있습니다."),
     STUDENT_ONLY(HttpStatus.FORBIDDEN, "QUESTION_STUDENT_ONLY", "학생만 질문을 등록하거나 조회할 수 있습니다."),
     QUESTION_MANAGE_FORBIDDEN(HttpStatus.FORBIDDEN, "QUESTION_MANAGE_FORBIDDEN", "질문 관리 권한이 없습니다."),
+    COMMENT_CREATE_FORBIDDEN(HttpStatus.FORBIDDEN, "QUESTION_COMMENT_CREATE_FORBIDDEN", "해당 질문에 댓글을 작성할 권한이 없습니다."),
     AUTHOR_ONLY(HttpStatus.FORBIDDEN, "QUESTION_AUTHOR_ONLY", "작성자만 수정할 수 있습니다."),
     INVALID_SCOPE(HttpStatus.BAD_REQUEST, "QUESTION_INVALID_SCOPE", "SLIDE 범위에는 slide_id가 필요합니다."),
     INVALID_PIN(HttpStatus.BAD_REQUEST, "QUESTION_INVALID_PIN", "질문 위치는 0 이상 1 이하이어야 합니다."),
