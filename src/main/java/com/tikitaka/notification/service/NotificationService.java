@@ -206,7 +206,8 @@ public class NotificationService {
                 NotificationType.ASSIGNMENT_CLOSED,
                 PermissionType.ASSIGNMENT_MANAGE,
                 message,
-                assignmentId
+                assignmentId,
+                DuplicatePolicy.SKIP_EXISTING
         );
     }
 
@@ -224,7 +225,8 @@ public class NotificationService {
                 NotificationType.SPACE_JOIN_REQUESTED,
                 PermissionType.MEMBER_MANAGE,
                 message,
-                spaceMemberId
+                spaceMemberId,
+                DuplicatePolicy.CREATE_ALWAYS
         );
     }
 
@@ -261,7 +263,8 @@ public class NotificationService {
             NotificationType type,
             PermissionType assistantPermission,
             String message,
-            UUID targetId
+            UUID targetId,
+            DuplicatePolicy duplicatePolicy
     ) {
         List<SpaceMember> members = spaceMemberRepository
                 .findAllBySpaceIdAndStatusAndRemovedAtIsNull(
@@ -283,13 +286,23 @@ public class NotificationService {
                 continue;
             }
 
-            saveIfAbsent(
-                    member.getUser(),
-                    space,
-                    type,
-                    message,
-                    targetId
-            );
+            if (duplicatePolicy == DuplicatePolicy.CREATE_ALWAYS) {
+                save(
+                        member.getUser(),
+                        space,
+                        type,
+                        message,
+                        targetId
+                );
+            } else {
+                saveIfAbsent(
+                        member.getUser(),
+                        space,
+                        type,
+                        message,
+                        targetId
+                );
+            }
         }
     }
 
@@ -310,6 +323,23 @@ public class NotificationService {
         if (exists) {
             return;
         }
+
+        save(
+                user,
+                space,
+                type,
+                message,
+                targetId
+        );
+    }
+
+    private void save(
+            User user,
+            Space space,
+            NotificationType type,
+            String message,
+            UUID targetId
+    ) {
 
         Notification notification = notificationRepository.save(
                 Notification.create(
@@ -361,5 +391,10 @@ public class NotificationService {
             Instant createdAt,
             UUID id
     ) {
+    }
+
+    private enum DuplicatePolicy {
+        SKIP_EXISTING,
+        CREATE_ALWAYS
     }
 }
