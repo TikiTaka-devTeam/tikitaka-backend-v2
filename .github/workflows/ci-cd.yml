@@ -78,7 +78,7 @@ jobs:
 
             JAR_FILE=$(find /tmp/tikitaka-deploy -name "*.jar" | head -n 1)
 
-            cp "$JAR_FILE" /opt/tikitaka/tikitaka.jar
+            sudo install -m 0644 "$JAR_FILE" /opt/tikitaka/tikitaka.jar
 
             sudo systemctl restart tikitaka
 
