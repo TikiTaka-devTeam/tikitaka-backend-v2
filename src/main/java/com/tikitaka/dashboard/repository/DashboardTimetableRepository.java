@@ -21,6 +21,7 @@ public class DashboardTimetableRepository {
                         select new com.tikitaka.dashboard.dto.DashboardTimetableRow(
                             space.id,
                             space.spaceName,
+                            member.colorKey,
                             space.classroom,
                             schedule.day,
                             schedule.startTime,
