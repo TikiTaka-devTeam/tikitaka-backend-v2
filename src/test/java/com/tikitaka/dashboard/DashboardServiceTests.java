@@ -20,6 +20,7 @@ import com.tikitaka.dashboard.repository.DashboardAssignmentRepository;
 import com.tikitaka.dashboard.repository.DashboardTimetableRepository;
 import com.tikitaka.dashboard.service.DashboardService;
 import com.tikitaka.space.entity.DayOfWeek;
+import com.tikitaka.space.entity.SpaceColorKey;
 
 class DashboardServiceTests {
 
@@ -36,11 +37,13 @@ class DashboardServiceTests {
         UUID spaceId = UUID.randomUUID();
         when(timetableRepository.findTimetable(userId)).thenReturn(List.of(
                 new DashboardTimetableRow(
-                        spaceId, "운영체제", "SW101", DayOfWeek.WEDNESDAY,
+                        spaceId, "운영체제", SpaceColorKey.COLOR_3,
+                        "SW101", DayOfWeek.WEDNESDAY,
                         LocalTime.of(13, 0), LocalTime.of(14, 30)
                 ),
                 new DashboardTimetableRow(
-                        spaceId, "운영체제", "SW101", DayOfWeek.MONDAY,
+                        spaceId, "운영체제", SpaceColorKey.COLOR_3,
+                        "SW101", DayOfWeek.MONDAY,
                         LocalTime.of(9, 0), LocalTime.of(10, 30)
                 )
         ));
@@ -50,6 +53,7 @@ class DashboardServiceTests {
 
         assertThat(response).hasSize(1);
         assertThat(response.get(0).spaceId()).isEqualTo(spaceId);
+        assertThat(response.get(0).colorKey()).isEqualTo(SpaceColorKey.COLOR_3);
         assertThat(response.get(0).schedules())
                 .extracting(item -> item.day())
                 .containsExactly(DayOfWeek.MONDAY, DayOfWeek.WEDNESDAY);

@@ -32,7 +32,8 @@ public class DashboardController {
 
     @Operation(
             summary = "DSH-001 활성 Space 시간표 조회",
-            description = "사용자가 승인된 멤버로 참여 중인 활성 Space의 시간표를 조회합니다."
+            description = "사용자가 승인된 멤버로 참여 중인 활성 Space의 시간표와 "
+                    + "Space 목록에서 사용하는 동일한 color_key를 조회합니다."
     )
     @GetMapping("/timetable")
     public ResponseEntity<List<DashboardTimetableItem>> getTimetable(

@@ -16,6 +16,7 @@ import com.tikitaka.dashboard.dto.DashboardTimetableItem;
 import com.tikitaka.dashboard.dto.DashboardTimetableRow;
 import com.tikitaka.dashboard.repository.DashboardAssignmentRepository;
 import com.tikitaka.dashboard.repository.DashboardTimetableRepository;
+import com.tikitaka.space.entity.SpaceColorKey;
 
 import lombok.RequiredArgsConstructor;
 
@@ -32,7 +33,11 @@ public class DashboardService {
                 dashboardTimetableRepository.findTimetable(userId)
                         .stream()
                         .collect(Collectors.groupingBy(
-                                row -> new SpaceKey(row.spaceId(), row.spaceName()),
+                                row -> new SpaceKey(
+                                        row.spaceId(),
+                                        row.spaceName(),
+                                        row.colorKey()
+                                ),
                                 LinkedHashMap::new,
                                 Collectors.toList()
                         ));
@@ -41,6 +46,7 @@ public class DashboardService {
                 .map(entry -> new DashboardTimetableItem(
                         entry.getKey().spaceId(),
                         entry.getKey().spaceName(),
+                        entry.getKey().colorKey(),
                         entry.getValue().stream()
                                 .sorted(Comparator
                                         .comparing(DashboardTimetableRow::day)
@@ -63,6 +69,10 @@ public class DashboardService {
         );
     }
 
-    private record SpaceKey(UUID spaceId, String spaceName) {
+    private record SpaceKey(
+            UUID spaceId,
+            String spaceName,
+            SpaceColorKey colorKey
+    ) {
     }
 }
