@@ -229,6 +229,7 @@ public class DocumentRevisionCompletionWorker {
         slideRepository.flush();
 
         List<Slide> insertedSlides = new ArrayList<>();
+        int finalPageNumber = 0;
 
         for (RevisionPage page : pages) {
             if (page.getSourceType() == RevisionSourceType.REVISION
@@ -236,10 +237,12 @@ public class DocumentRevisionCompletionWorker {
                 continue;
             }
 
+            // Deleted revision pages are absent from the PDF, so compact final numbering.
+            finalPageNumber++;
             if (page.getSourceType() == RevisionSourceType.ORIGINAL) {
                 Slide slide = page.getOriginalSlide();
 
-                slide.changePageNumber(page.getPosition());
+                slide.changePageNumber(finalPageNumber);
 
                 if (page.getStatus() == RevisionPageStatus.DELETE_PENDING) {
                     obsoleteKeys.add(slide.getThumbnailKey());
@@ -253,7 +256,7 @@ public class DocumentRevisionCompletionWorker {
                 insertedSlides.add(
                         Slide.create(
                                 document,
-                                page.getPosition(),
+                                finalPageNumber,
                                 changedSlideThumbnailKeys.get(page.getId())
                         )
                 );
