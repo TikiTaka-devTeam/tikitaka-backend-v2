@@ -12,6 +12,7 @@ import org.springframework.web.client.RestClientException;
 import com.tikitaka.auth.entity.AuthProvider;
 import com.tikitaka.auth.exception.AuthErrorCode;
 import com.tikitaka.global.exception.BusinessException;
+import com.tikitaka.global.exception.CommonErrorCode;
 
 @Component
 public class RestOAuthProviderClient implements OAuthProviderClient {
@@ -25,10 +26,15 @@ public class RestOAuthProviderClient implements OAuthProviderClient {
 
     @Override
     public OAuthProfile fetchProfile(AuthProvider provider, String authorizationCode) {
+        return fetchProfile(provider, authorizationCode, null);
+    }
+
+    @Override
+    public OAuthProfile fetchProfile(AuthProvider provider, String authorizationCode, String redirectUri) {
         try {
             return switch (provider) {
-                case GOOGLE -> google(authorizationCode);
-                case KAKAO -> kakao(authorizationCode);
+                case GOOGLE -> google(authorizationCode, redirectUri);
+                case KAKAO -> kakao(authorizationCode, redirectUri);
             };
         } catch (RestClientException | ClassCastException exception) {
             throw new BusinessException(OAuthErrorCode.AUTHENTICATION_FAILED, exception);
@@ -36,18 +42,18 @@ public class RestOAuthProviderClient implements OAuthProviderClient {
     }
 
     @SuppressWarnings("unchecked")
-    private OAuthProfile google(String code) {
+    private OAuthProfile google(String code, String redirectUri) {
         OAuthProperties.Provider config = requireConfig(properties.google());
-        Map<String, Object> token = token("https://oauth2.googleapis.com/token", code, config, true);
+        Map<String, Object> token = token("https://oauth2.googleapis.com/token", code, config, true, redirectUri);
         Map<String, Object> profile = userInfo("https://openidconnect.googleapis.com/v1/userinfo", token);
         return profile(AuthProvider.GOOGLE, profile.get("sub"), profile.get("email"),
                 profile.get("name"), profile.get("picture"));
     }
 
     @SuppressWarnings("unchecked")
-    private OAuthProfile kakao(String code) {
+    private OAuthProfile kakao(String code, String redirectUri) {
         OAuthProperties.Provider config = requireConfig(properties.kakao());
-        Map<String, Object> token = token("https://kauth.kakao.com/oauth/token", code, config, false);
+        Map<String, Object> token = token("https://kauth.kakao.com/oauth/token", code, config, false, redirectUri);
         Map<String, Object> body = userInfo("https://kapi.kakao.com/v2/user/me", token);
         Map<String, Object> account = (Map<String, Object>) body.get("kakao_account");
         Map<String, Object> kakaoProfile = account == null ? null : (Map<String, Object>) account.get("profile");
@@ -64,12 +70,12 @@ public class RestOAuthProviderClient implements OAuthProviderClient {
     }
 
     private Map<String, Object> token(String uri, String code, OAuthProperties.Provider config,
-                                      boolean includeSecret) {
+                                      boolean includeSecret, String requestedRedirectUri) {
         MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
         form.add("grant_type", "authorization_code");
         form.add("code", code);
         form.add("client_id", config.clientId());
-        form.add("redirect_uri", config.redirectUri());
+        form.add("redirect_uri", resolveRedirectUri(config, requestedRedirectUri));
         if (includeSecret || (config.clientSecret() != null && !config.clientSecret().isBlank())) {
             form.add("client_secret", config.clientSecret());
         }
@@ -80,6 +86,15 @@ public class RestOAuthProviderClient implements OAuthProviderClient {
             throw new BusinessException(OAuthErrorCode.AUTHENTICATION_FAILED);
         }
         return response;
+    }
+
+    private String resolveRedirectUri(OAuthProperties.Provider config, String requested) {
+        if (requested == null) return config.redirectUri();
+        if (requested.equals(config.redirectUri())
+                || (config.allowedRedirectUris() != null && config.allowedRedirectUris().contains(requested))) {
+            return requested;
+        }
+        throw new BusinessException(CommonErrorCode.INVALID_INPUT);
     }
 
     private Map<String, Object> userInfo(String uri, Map<String, Object> token) {

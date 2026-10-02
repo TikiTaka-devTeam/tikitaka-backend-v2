@@ -99,6 +99,26 @@ class AuthServiceTests {
         assertThat(userCaptor.getValue().getPassword()).isEqualTo("encoded-password");
     }
 
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.NullAndEmptySource
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"   ", " 20231370 "})
+    void acceptsOptionalMemberNumberDuringSignup(String memberNumber) {
+        SignupRequest request = new SignupRequest("user@example.com", "Test1234!", "Tester",
+                "010-1234-5678", "verification-token", AccountType.STUDENT, "Academy", "Course", memberNumber);
+        try (var factory = jakarta.validation.Validation.buildDefaultValidatorFactory()) {
+            assertThat(factory.getValidator().validate(request)).isEmpty();
+        }
+        when(passwordEncoder.encode(request.password())).thenReturn("encoded-password");
+        when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        var response = authService.signup(request, null);
+        String expected = memberNumber == null || memberNumber.isBlank() ? null : memberNumber.trim();
+        assertThat(response.memberIdNumber()).isEqualTo(expected);
+        ArgumentCaptor<User> saved = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).save(saved.capture());
+        assertThat(saved.getValue().getMemberIdNumber()).isEqualTo(expected);
+        verify(phoneVerificationConsumer).consume("verification-token", "01012345678");
+    }
+
     @Test
     void loginIssuesTokensAndStoresOnlyRefreshTokenHash() {
         UUID userId = UUID.randomUUID();

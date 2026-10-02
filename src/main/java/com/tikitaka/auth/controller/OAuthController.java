@@ -36,7 +36,7 @@ public class OAuthController {
             @ApiResponse(responseCode = "401", description = "OAuth 인증 실패")})
     public OAuthLoginResponse authorize(@PathVariable String provider,
             @RequestBody @Valid OAuthAuthorizationRequest request) {
-        return oauthService.authorize(provider, request.authorizationCode());
+        return oauthService.authorize(provider, request.authorizationCode(), request.redirectUri());
     }
 
     @PostMapping(value = "/signup", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
