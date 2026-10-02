@@ -99,7 +99,7 @@ public class AuthService {
                 phoneNumber,
                 request.univ().trim(),
                 request.major().trim(),
-                request.memberIdNumber().trim(),
+                request.memberIdNumber(),
                 profileUrl);
         return SignupResponse.from(userRepository.save(user), profileImageUrl(user.getProfileUrl()));
     }

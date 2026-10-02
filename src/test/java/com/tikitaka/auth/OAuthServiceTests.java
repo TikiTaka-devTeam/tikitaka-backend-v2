@@ -173,6 +173,40 @@ class OAuthServiceTests {
         verify(s3Service).uploadProfileImage(image, request.name().trim());
     }
 
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.NullAndEmptySource
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"   ", " 20231370 "})
+    void acceptsOptionalMemberNumberDuringOAuthSignup(String memberNumber) {
+        OAuthSignupRequest request = new OAuthSignupRequest("signup-token", "user@example.com", "Tester",
+                "010-1234-5678", "phone-token", AccountType.STUDENT, "Academy", "Course", memberNumber);
+        try (var factory = jakarta.validation.Validation.buildDefaultValidatorFactory()) {
+            assertThat(factory.getValidator().validate(request)).isEmpty();
+        }
+        when(signupTokens.validate("signup-token")).thenReturn(new OAuthSignupClaims(
+                AuthProvider.KAKAO, "provider-id", null, "Tester", null));
+        when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(jwtProvider.issue(null)).thenReturn(tokens());
+        when(refreshHasher.hash("refresh")).thenReturn("refresh-hash");
+        var response = service.signup(request, null);
+        assertThat(response.user().memberIdNumber()).isEqualTo(
+                memberNumber == null || memberNumber.isBlank() ? null : memberNumber.trim());
+        verify(phoneConsumer).consume("phone-token", "01012345678");
+    }
+
+    @Test
+    void rejectsMemberNumberLongerThanThirtyCharactersInBothSignupRequests() {
+        var oauth = new OAuthSignupRequest("signup-token", "user@example.com", "Tester",
+                "010-1234-5678", "phone-token", AccountType.STUDENT, "Academy", "Course", "1".repeat(31));
+        var local = new com.tikitaka.auth.dto.SignupRequest("user@example.com", "Test1234!", "Tester",
+                "010-1234-5678", "phone-token", AccountType.STUDENT, "Academy", "Course", "1".repeat(31));
+        try (var factory = jakarta.validation.Validation.buildDefaultValidatorFactory()) {
+            assertThat(factory.getValidator().validate(oauth)).singleElement()
+                    .satisfies(v -> assertThat(v.getPropertyPath().toString()).isEqualTo("memberIdNumber"));
+            assertThat(factory.getValidator().validate(local)).singleElement()
+                    .satisfies(v -> assertThat(v.getPropertyPath().toString()).isEqualTo("memberIdNumber"));
+        }
+    }
+
     private Auth mockAuth(User user) {
         Auth auth = mock(Auth.class);
         when(auth.getUser()).thenReturn(user);

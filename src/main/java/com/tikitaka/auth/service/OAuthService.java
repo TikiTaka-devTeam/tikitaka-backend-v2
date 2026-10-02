@@ -95,7 +95,7 @@ public class OAuthService {
         phoneVerificationConsumer.consume(request.phoneVerificationToken(), phone);
         String profileUrl = resolveProfileUrl(profileImage, claims.profileUrl(), name);
         User user = userRepository.save(User.createLocal(email, null, name, request.accountType(),
-                phone, request.univ().trim(), request.major().trim(), request.memberIdNumber().trim(),
+                phone, request.univ().trim(), request.major().trim(), request.memberIdNumber(),
                 profileUrl));
         authRepository.save(Auth.create(user, claims.provider(), claims.providerUserId()));
         return OAuthSignupResponse.of(issueTokens(user), user, profileImageUrl(user.getProfileUrl()));

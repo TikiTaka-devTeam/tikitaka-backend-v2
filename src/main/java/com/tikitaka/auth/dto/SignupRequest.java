@@ -31,7 +31,7 @@ public record SignupRequest(
         @NotBlank @Size(max = 100) String univ,
         @Schema(description = "전공", example = "컴퓨터공학")
         @NotBlank @Size(max = 100) String major,
-        @Schema(description = "학번 또는 교번", example = "32221234")
-        @JsonProperty("member_id_number") @NotBlank @Size(max = 30) String memberIdNumber
+        @Schema(description = "학번 또는 교번 (선택, 생략 또는 null 허용)", example = "32221234")
+        @JsonProperty("member_id_number") @Size(max = 30) String memberIdNumber
 ) {
 }
