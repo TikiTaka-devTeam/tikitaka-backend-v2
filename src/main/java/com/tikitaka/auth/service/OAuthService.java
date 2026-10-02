@@ -60,8 +60,15 @@ public class OAuthService {
 
     @Transactional
     public OAuthLoginResponse authorize(String providerValue, String authorizationCode) {
+        return authorize(providerValue, authorizationCode, null);
+    }
+
+    @Transactional
+    public OAuthLoginResponse authorize(String providerValue, String authorizationCode, String redirectUri) {
         AuthProvider provider = parseProvider(providerValue);
-        OAuthProfile profile = providerClient.fetchProfile(provider, authorizationCode);
+        OAuthProfile profile = redirectUri == null
+                ? providerClient.fetchProfile(provider, authorizationCode)
+                : providerClient.fetchProfile(provider, authorizationCode, redirectUri);
         return authRepository.findByProviderAndProviderUserId(provider, profile.providerUserId())
                 .map(Auth::getUser).map(user -> {
                     ensureActive(user);

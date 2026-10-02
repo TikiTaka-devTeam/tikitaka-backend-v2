@@ -81,6 +81,22 @@ class OAuthServiceTests {
     }
 
     @Test
+    void forwardsFrontendCallbackWhenAuthorizingCode() {
+        String redirectUri = "http://localhost:5173/oauth/callback";
+        OAuthProfile profile = new OAuthProfile(AuthProvider.GOOGLE, "provider-id",
+                "user@example.com", "Tester", null);
+        when(providerClient.fetchProfile(AuthProvider.GOOGLE, "code", redirectUri)).thenReturn(profile);
+        when(authRepository.findByProviderAndProviderUserId(AuthProvider.GOOGLE, "provider-id"))
+                .thenReturn(Optional.empty());
+        when(signupTokens.issue(profile)).thenReturn("signup-token");
+
+        var response = service.authorize("google", "code", redirectUri);
+
+        assertThat(response.signupRequired()).isTrue();
+        verify(providerClient).fetchProfile(AuthProvider.GOOGLE, "code", redirectUri);
+    }
+
+    @Test
     void unknownOAuthAccountReturnsNormalizedProfileAndSignupToken() {
         OAuthProfile profile = new OAuthProfile(AuthProvider.KAKAO, "provider-id",
                 " User@Example.COM ", "김선민", "https://profile");
