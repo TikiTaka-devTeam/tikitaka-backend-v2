@@ -210,6 +210,41 @@ class NoteServiceTests {
         assertThat(event.getValue().version()).isEqualTo(1);
         verifyNoInteractions(privateLayers,privateStrokes,privateOps);
     }
+    @Test void assistantKeepsPrivateLayerAcrossMaterialPermissionChanges() {
+        when(member.getRole()).thenReturn(SpaceMemberRole.ASSISTANT);
+        when(privateLayers.findForRead(slideId, user.getId())).thenReturn(Optional.of(layer));
+        when(privateStrokes.saveAndFlush(any())).thenAnswer(invocation -> {
+            PrivateStroke stroke = invocation.getArgument(0);
+            org.springframework.test.util.ReflectionTestUtils.setField(stroke, "id", UUID.randomUUID());
+            return stroke;
+        });
+        when(sharedLayers.findForRead(slideId)).thenReturn(Optional.empty());
+        assertThat(service.syncPrivate(slideId, request(0, create()), user).version()).isEqualTo(1);
+
+        when(permissions.existsBySpaceMemberIdAndPermission(member.getId(), PermissionType.LECTURE_MATERIAL_MANAGE))
+                .thenReturn(true);
+        assertThat(service.getPrivate(slideId, user).version()).isEqualTo(1);
+        assertThat(service.syncPrivate(slideId, request(1, create()), user).version()).isEqualTo(2);
+
+        when(permissions.existsBySpaceMemberIdAndPermission(member.getId(), PermissionType.LECTURE_MATERIAL_MANAGE))
+                .thenReturn(false);
+        error(() -> service.syncShared(slideId, request(0, create()), user), NoteErrorCode.NOTE_ACCESS_DENIED);
+        assertThat(service.getShared(slideId, user).strokes()).isEmpty();
+        assertThat(service.getPrivate(slideId, user).version()).isEqualTo(2);
+        assertThat(service.syncPrivate(slideId, request(2, create()), user).version()).isEqualTo(3);
+        verify(sharedLayers, never()).ensureExists(any());
+        verifyNoInteractions(sharedStrokes, sharedOps);
+    }
+    @Test void removedAssistantCannotReadOrWriteEitherLayer() {
+        when(member.getRole()).thenReturn(SpaceMemberRole.ASSISTANT);
+        when(members.findBySpaceIdAndUserIdAndStatusAndRemovedAtIsNull(spaceId,user.getId(),SpaceMemberStatus.APPROVED))
+                .thenReturn(Optional.empty());
+        error(() -> service.getPrivate(slideId, user), NoteErrorCode.NOTE_ACCESS_DENIED);
+        error(() -> service.syncPrivate(slideId, request(0, create()), user), NoteErrorCode.NOTE_ACCESS_DENIED);
+        error(() -> service.getShared(slideId, user), NoteErrorCode.NOTE_ACCESS_DENIED);
+        error(() -> service.syncShared(slideId, request(0, create()), user), NoteErrorCode.NOTE_ACCESS_DENIED);
+        verifyNoInteractions(privateLayers, sharedLayers, privateOps, sharedOps);
+    }
     @Test void removedMemberCannotRetryPreviouslyAppliedOperation() {
         when(members.findBySpaceIdAndUserIdAndStatusAndRemovedAtIsNull(spaceId,user.getId(),SpaceMemberStatus.APPROVED)).thenReturn(Optional.empty());
         error(() -> service.syncPrivate(slideId,request(0,create()),user),NoteErrorCode.NOTE_ACCESS_DENIED);

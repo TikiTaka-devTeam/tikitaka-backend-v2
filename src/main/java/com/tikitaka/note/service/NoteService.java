@@ -187,7 +187,8 @@ public class NoteService {
         SpaceMember member = memberRepository.findBySpaceIdAndUserIdAndStatusAndRemovedAtIsNull(
                 slide.getDocument().getSpace().getId(), user.getId(), SpaceMemberStatus.APPROVED)
                 .orElseThrow(() -> new BusinessException(NoteErrorCode.NOTE_ACCESS_DENIED));
-        if (!shared && member.getRole() != SpaceMemberRole.STUDENT) {
+        if (!shared && member.getRole() != SpaceMemberRole.STUDENT
+                && member.getRole() != SpaceMemberRole.ASSISTANT) {
             throw new BusinessException(NoteErrorCode.NOTE_ACCESS_DENIED);
         }
         if (shared && edit && member.getRole() != SpaceMemberRole.PROFESSOR
