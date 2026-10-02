@@ -1,0 +1,1 @@
+ALTER TABLE users ALTER COLUMN member_id_number DROP NOT NULL;

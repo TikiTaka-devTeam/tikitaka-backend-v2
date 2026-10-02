@@ -126,10 +126,12 @@ oauth:
     client-id: ${GOOGLE_OAUTH_CLIENT_ID:}
     client-secret: ${GOOGLE_OAUTH_CLIENT_SECRET:}
     redirect-uri: ${GOOGLE_OAUTH_REDIRECT_URI:http://localhost:8080/api/v1/auth/oauth/google/callback}
+    allowed-redirect-uris: ${GOOGLE_OAUTH_ALLOWED_REDIRECT_URIS:http://localhost:5173/oauth/callback,https://tikitaka-frontend-v2.tikitakadev2026.workers.dev/oauth/callback}
   kakao:
     client-id: ${KAKAO_OAUTH_CLIENT_ID:}
     client-secret: ${KAKAO_OAUTH_CLIENT_SECRET:}
     redirect-uri: ${KAKAO_OAUTH_REDIRECT_URI:http://localhost:8080/api/v1/auth/oauth/kakao/callback}
+    allowed-redirect-uris: ${KAKAO_OAUTH_ALLOWED_REDIRECT_URIS:http://localhost:5173/oauth/callback,https://tikitaka-frontend-v2.tikitakadev2026.workers.dev/oauth/callback}
 
 webpush:
   vapid:

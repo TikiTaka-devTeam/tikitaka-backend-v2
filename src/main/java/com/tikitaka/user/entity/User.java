@@ -48,7 +48,7 @@ public class User extends BaseTimeEntity {
     @Column(nullable = false, length = 100)
     private String major;
 
-    @Column(name = "member_id_number", nullable = false, length = 30)
+    @Column(name = "member_id_number", length = 30)
     private String memberIdNumber;
 
     @Column(name = "profile_url", columnDefinition = "TEXT")
@@ -77,7 +77,7 @@ public class User extends BaseTimeEntity {
         this.phoneNumber = phoneNumber;
         this.univ = univ;
         this.major = major;
-        this.memberIdNumber = memberIdNumber;
+        this.memberIdNumber = memberIdNumber == null || memberIdNumber.isBlank() ? null : memberIdNumber.trim();
         this.profileUrl = profileUrl;
     }
 

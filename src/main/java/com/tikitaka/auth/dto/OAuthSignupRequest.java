@@ -19,6 +19,6 @@ public record OAuthSignupRequest(
         @JsonProperty("account_type") @NotNull AccountType accountType,
         @NotBlank @Size(max = 100) String univ,
         @NotBlank @Size(max = 100) String major,
-        @JsonProperty("member_id_number") @NotBlank @Size(max = 30) String memberIdNumber
+        @JsonProperty("member_id_number") @Size(max = 30) String memberIdNumber
 ) {
 }

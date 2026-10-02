@@ -60,8 +60,15 @@ public class OAuthService {
 
     @Transactional
     public OAuthLoginResponse authorize(String providerValue, String authorizationCode) {
+        return authorize(providerValue, authorizationCode, null);
+    }
+
+    @Transactional
+    public OAuthLoginResponse authorize(String providerValue, String authorizationCode, String redirectUri) {
         AuthProvider provider = parseProvider(providerValue);
-        OAuthProfile profile = providerClient.fetchProfile(provider, authorizationCode);
+        OAuthProfile profile = redirectUri == null
+                ? providerClient.fetchProfile(provider, authorizationCode)
+                : providerClient.fetchProfile(provider, authorizationCode, redirectUri);
         return authRepository.findByProviderAndProviderUserId(provider, profile.providerUserId())
                 .map(Auth::getUser).map(user -> {
                     ensureActive(user);
@@ -88,7 +95,7 @@ public class OAuthService {
         phoneVerificationConsumer.consume(request.phoneVerificationToken(), phone);
         String profileUrl = resolveProfileUrl(profileImage, claims.profileUrl(), name);
         User user = userRepository.save(User.createLocal(email, null, name, request.accountType(),
-                phone, request.univ().trim(), request.major().trim(), request.memberIdNumber().trim(),
+                phone, request.univ().trim(), request.major().trim(), request.memberIdNumber(),
                 profileUrl));
         authRepository.save(Auth.create(user, claims.provider(), claims.providerUserId()));
         return OAuthSignupResponse.of(issueTokens(user), user, profileImageUrl(user.getProfileUrl()));
