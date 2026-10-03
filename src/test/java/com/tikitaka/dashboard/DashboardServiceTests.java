@@ -76,7 +76,8 @@ class DashboardServiceTests {
                 UUID.randomUUID(),
                 "운영체제",
                 "프로세스 과제",
-                Instant.parse("2026-09-01T14:59:59Z")
+                Instant.parse("2026-09-01T14:59:59Z"),
+                "OPEN"
         );
         when(repository.findOpenAssignments(userId)).thenReturn(List.of(item));
 

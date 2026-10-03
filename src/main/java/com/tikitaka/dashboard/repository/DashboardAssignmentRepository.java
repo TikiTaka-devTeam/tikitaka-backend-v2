@@ -23,7 +23,8 @@ public class DashboardAssignmentRepository {
                             space.id,
                             space.spaceName,
                             assignment.title,
-                            assignment.dueAt
+                            assignment.dueAt,
+                            'OPEN'
                         )
                         from Assignment assignment
                         join assignment.space space
