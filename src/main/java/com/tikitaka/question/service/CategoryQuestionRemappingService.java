@@ -165,6 +165,9 @@ public class CategoryQuestionRemappingService {
 
         List<QuestionAnalyzeRequest.CategoryCandidate> candidates = snapshot.categories()
                 .stream()
+                .filter(category -> !category.name().equalsIgnoreCase(
+                        QuestionCategory.FALLBACK_NAME
+                ))
                 .map(category -> new QuestionAnalyzeRequest.CategoryCandidate(
                         category.categoryId(),
                         category.name(),
@@ -192,17 +195,20 @@ public class CategoryQuestionRemappingService {
 
         transactionTemplate.executeWithoutResult(status ->
                 replaceMappings(
-                        question.questionId(),
-                        snapshot.documentId(),
-                        matchedCategoryIds
-                )
+                question.questionId(),
+                snapshot.documentId(),
+                matchedCategoryIds,
+                response.relation() == QuestionScope.COURSE_RELATED
+                        && matchedCategoryIds.isEmpty()
+        )
         );
     }
 
     private void replaceMappings(
             UUID questionId,
             UUID documentId,
-            Set<UUID> matchedCategoryIds
+            Set<UUID> matchedCategoryIds,
+            boolean useFallback
     ) {
         Question question = questionRepository.findById(questionId)
                 .filter(value -> !value.isDeleted())
@@ -215,12 +221,35 @@ public class CategoryQuestionRemappingService {
         List<QuestionCategory> categories = categoryRepository
                 .findAllByDocumentIdAndDeletedFalse(documentId);
 
+        QuestionCategory fallbackCategory = useFallback
+                ? categories.stream()
+                        .filter(category -> category.getName().equalsIgnoreCase(
+                                QuestionCategory.FALLBACK_NAME
+                        ))
+                        .findFirst()
+                        .orElseGet(() -> categoryRepository.save(
+                                QuestionCategory.createFallback(
+                                        question.getDocument()
+                                )
+                        ))
+                : null;
+
         mappingRepository.deleteAllByQuestionId(questionId);
 
         categories.stream()
-                .filter(category -> matchedCategoryIds.contains(category.getId()))
+                .filter(category -> matchedCategoryIds.contains(category.getId())
+                        || (fallbackCategory != null
+                        && category.getId().equals(fallbackCategory.getId())))
                 .map(category -> QuestionCategoryMapping.create(question, category))
                 .forEach(mappingRepository::save);
+
+        if (fallbackCategory != null
+                && categories.stream().noneMatch(category ->
+                category.getId().equals(fallbackCategory.getId()))) {
+            mappingRepository.save(
+                    QuestionCategoryMapping.create(question, fallbackCategory)
+            );
+        }
     }
 
     private record CategorySnapshot(
