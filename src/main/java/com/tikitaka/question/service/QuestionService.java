@@ -22,6 +22,7 @@ import com.tikitaka.document.repository.SlideRepository;
 import com.tikitaka.document.storage.DocumentStorage;
 import com.tikitaka.global.common.cursor.CursorCodec;
 import com.tikitaka.global.exception.BusinessException;
+import com.tikitaka.notification.service.NotificationService;
 import com.tikitaka.question.dto.request.CategoryBatchRequest;
 import com.tikitaka.question.dto.request.CategoryCreateRequest;
 import com.tikitaka.question.dto.request.CategoryUpdateRequest;
@@ -81,6 +82,7 @@ public class QuestionService {
     private final SimilarQuestionService similarQuestionService;
     private final CategoryQuestionRemappingService categoryQuestionRemappingService;
     private final TransactionTemplate transactionTemplate;
+    private final NotificationService notificationService;
 
     public enum QuestionSortType {
         MOST_VIEWED,
@@ -391,9 +393,12 @@ public class QuestionService {
                                     request.yRatio()
                             );
 
-                    return questions
-                            .save(question)
-                            .getId();
+                    Question savedQuestion = questions.save(question);
+                    notificationService.createQuestionCreatedNotification(
+                            slide.getDocument().getSpace(),
+                            savedQuestion.getId()
+                    );
+                    return savedQuestion.getId();
                 });
 
         if (questionId == null) {
@@ -452,9 +457,12 @@ public class QuestionService {
                                     request.content().trim()
                             );
 
-                    return questions
-                            .save(question)
-                            .getId();
+                    Question savedQuestion = questions.save(question);
+                    notificationService.createQuestionCreatedNotification(
+                            document.getSpace(),
+                            savedQuestion.getId()
+                    );
+                    return savedQuestion.getId();
                 });
 
         if (questionId == null) {
@@ -574,6 +582,11 @@ public class QuestionService {
                 );
 
         question.markAnswered();
+        notificationService.createQuestionAnsweredNotification(
+                question.getStudent(),
+                question.getDocument().getSpace(),
+                question.getId()
+        );
 
         return new AnswerMutation(
                 answer.getId(),

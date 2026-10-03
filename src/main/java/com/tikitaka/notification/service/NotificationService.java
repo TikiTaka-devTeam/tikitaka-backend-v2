@@ -230,6 +230,44 @@ public class NotificationService {
         );
     }
 
+    // QUESTION_CREATED: 교수 + QUESTION_MANAGE 권한 조교
+    @Transactional
+    public void createQuestionCreatedNotification(
+            Space space,
+            UUID questionId
+    ) {
+        String message = space.getSpaceName()
+                + "에 새 학생 질문이 등록되었습니다.";
+
+        createManagerNotifications(
+                space,
+                NotificationType.QUESTION_CREATED,
+                PermissionType.QUESTION_MANAGE,
+                message,
+                questionId,
+                DuplicatePolicy.SKIP_EXISTING
+        );
+    }
+
+    // QUESTION_ANSWERED: 질문 작성 학생
+    @Transactional
+    public void createQuestionAnsweredNotification(
+            User student,
+            Space space,
+            UUID questionId
+    ) {
+        String message = space.getSpaceName()
+                + "에 등록한 내 질문에 답변이 등록되었습니다.";
+
+        saveIfAbsent(
+                student,
+                space,
+                NotificationType.QUESTION_ANSWERED,
+                message,
+                questionId
+        );
+    }
+
     private void createParticipantNotifications(
             Space space,
             NotificationType type,
