@@ -205,7 +205,8 @@ class QuestionListCategoryFilterTests {
                     mock(DocumentStorage.class), members,
                     mock(SpaceMemberPermissionRepository.class), cursorCodec,
                     mock(QuestionAiProcessingService.class), mock(SimilarQuestionService.class),
-                    mock(CategoryQuestionRemappingService.class), mock(TransactionTemplate.class));
+                    mock(CategoryQuestionRemappingService.class), mock(TransactionTemplate.class),
+                    mock(com.tikitaka.notification.service.NotificationService.class));
         }
 
         private Document document(Space owner, UUID id) {

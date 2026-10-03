@@ -12,6 +12,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.tikitaka.global.exception.BusinessException;
+import com.tikitaka.notification.service.NotificationService;
 import com.tikitaka.question.ai.AnswerAiClient;
 import com.tikitaka.question.ai.dto.AnswerTranscribeResponse;
 import com.tikitaka.question.dto.response.VoiceAnswerResponse;
@@ -73,6 +74,9 @@ public class VoiceAnswerService {
 
     private final TransactionTemplate
             transactionTemplate;
+
+    private final NotificationService
+            notificationService;
 
     @Transactional(
             propagation =
@@ -208,6 +212,15 @@ public class VoiceAnswerService {
                 );
 
         question.markAnswered();
+
+        notificationService
+                .createQuestionAnsweredNotification(
+                        question.getStudent(),
+                        question
+                                .getDocument()
+                                .getSpace(),
+                        question.getId()
+                );
 
         return new VoiceAnswerSnapshot(
                 answer.getId(),

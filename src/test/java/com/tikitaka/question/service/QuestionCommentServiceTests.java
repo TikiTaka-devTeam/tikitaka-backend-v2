@@ -75,7 +75,8 @@ class QuestionCommentServiceTests {
             mock(QuestionAiProcessingService.class),
             mock(SimilarQuestionService.class),
             mock(CategoryQuestionRemappingService.class),
-            mock(TransactionTemplate.class)
+            mock(TransactionTemplate.class),
+            mock(com.tikitaka.notification.service.NotificationService.class)
     );
 
     private final UUID spaceId = UUID.randomUUID();
