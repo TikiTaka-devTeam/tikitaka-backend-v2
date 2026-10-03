@@ -11,6 +11,8 @@ public record DashboardAssignmentItem(
         @JsonProperty("space_name") String spaceName,
         String title,
         @JsonProperty("due_at") Instant dueAt,
-        String status
+        String status,
+        @JsonProperty("submission_status") String submissionStatus,
+        @JsonProperty("grading_status") String gradingStatus
 ) {
 }

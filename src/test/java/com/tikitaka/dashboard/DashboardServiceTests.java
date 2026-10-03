@@ -69,7 +69,7 @@ class DashboardServiceTests {
     }
 
     @Test
-    void returnsOpenAssignmentsProvidedByDashboardRepository() {
+    void returnsAssignmentsProvidedByDashboardRepository() {
         UUID userId = UUID.randomUUID();
         DashboardAssignmentItem item = new DashboardAssignmentItem(
                 UUID.randomUUID(),
@@ -77,20 +77,22 @@ class DashboardServiceTests {
                 "운영체제",
                 "프로세스 과제",
                 Instant.parse("2026-09-01T14:59:59Z"),
-                "OPEN"
+                "OPEN",
+                "NOT_SUBMITTED",
+                "DRAFT"
         );
-        when(repository.findOpenAssignments(userId)).thenReturn(List.of(item));
+        when(repository.findAssignments(userId)).thenReturn(List.of(item));
 
         DashboardAssignmentsResponse response = dashboardService.getAssignments(userId);
 
         assertThat(response.assignments()).containsExactly(item);
-        verify(repository).findOpenAssignments(userId);
+        verify(repository).findAssignments(userId);
     }
 
     @Test
     void returnsEmptyAssignmentsInsteadOfNull() {
         UUID userId = UUID.randomUUID();
-        when(repository.findOpenAssignments(userId)).thenReturn(List.of());
+        when(repository.findAssignments(userId)).thenReturn(List.of());
 
         DashboardAssignmentsResponse response = dashboardService.getAssignments(userId);
 
