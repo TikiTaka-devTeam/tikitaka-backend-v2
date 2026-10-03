@@ -3,6 +3,8 @@ package com.tikitaka.search.service;
 import java.util.List;
 import java.util.UUID;
 import com.tikitaka.document.storage.DocumentStorage;
+import com.tikitaka.global.exception.BusinessException;
+import com.tikitaka.global.exception.CommonErrorCode;
 
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -21,6 +23,32 @@ public class SearchHistoryService {
     public SearchHistoryService(JdbcTemplate jdbcTemplate, DocumentStorage documentStorage) {
         this.jdbcTemplate = jdbcTemplate;
         this.documentStorage = documentStorage;
+    }
+
+    @Transactional
+    public void saveRecentSearch(UUID userId, String rawKeyword) {
+        if (rawKeyword == null || rawKeyword.trim().isEmpty()) {
+            throw new BusinessException(CommonErrorCode.INVALID_INPUT);
+        }
+        String keyword = rawKeyword.trim();
+        if (keyword.codePointCount(0, keyword.length()) > 255) {
+            throw new BusinessException(CommonErrorCode.INVALID_INPUT);
+        }
+        jdbcTemplate.update("""
+                INSERT INTO recent_searches (id, user_id, keyword, searched_at)
+                VALUES (?, ?, ?, NOW())
+                ON CONFLICT (user_id, keyword)
+                DO UPDATE SET searched_at = EXCLUDED.searched_at
+                """, UUID.randomUUID(), userId, keyword);
+        jdbcTemplate.update("""
+                DELETE FROM recent_searches
+                WHERE id IN (
+                  SELECT id FROM recent_searches
+                  WHERE user_id = ?
+                  ORDER BY searched_at DESC, id DESC
+                  OFFSET 10
+                )
+                """, userId);
     }
 
     @Transactional(readOnly = true)

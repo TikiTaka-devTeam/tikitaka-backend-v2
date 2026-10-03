@@ -104,6 +104,34 @@ class DocumentServiceTests {
     }
 
     @Test
+    void openingDocumentRecordsViewAndReopeningRefreshesIt() {
+        UUID spaceId = UUID.randomUUID();
+        UUID documentId = UUID.randomUUID();
+        User user = user();
+        approve(spaceId, user, SpaceMemberRole.STUDENT);
+        Space space = mock(Space.class);
+        Document document = mock(Document.class);
+        when(space.getId()).thenReturn(spaceId);
+        when(document.getId()).thenReturn(documentId);
+        when(document.getSpace()).thenReturn(space);
+        when(documentRepository.findById(documentId)).thenReturn(Optional.of(document));
+        when(recentViewRepository.findByUserIdAndDocumentId(user.getId(), documentId))
+                .thenReturn(Optional.empty());
+
+        service.getSlides(documentId, user);
+
+        verify(recentViewRepository).save(any(RecentDocumentView.class));
+        RecentDocumentView existingView = mock(RecentDocumentView.class);
+        when(recentViewRepository.findByUserIdAndDocumentId(user.getId(), documentId))
+                .thenReturn(Optional.of(existingView));
+
+        service.getSlides(documentId, user);
+
+        verify(existingView).refreshViewedAt();
+        verify(recentViewRepository).save(any(RecentDocumentView.class));
+    }
+
+    @Test
     void returnsPresignedThumbnailUrlsToApprovedMember() {
 
         UUID spaceId =
