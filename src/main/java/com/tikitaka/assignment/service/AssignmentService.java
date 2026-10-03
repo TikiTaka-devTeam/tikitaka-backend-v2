@@ -54,6 +54,7 @@ import com.tikitaka.assignment.repository.AssignmentFileRepository;
 import com.tikitaka.assignment.repository.AssignmentGradeRepository;
 import com.tikitaka.assignment.repository.AssignmentRepository;
 import com.tikitaka.assignment.repository.AssignmentSubmissionRepository;
+import com.tikitaka.assignment.repository.AssignmentViewRepository;
 import com.tikitaka.assignment.repository.SubmissionFileRepository;
 import com.tikitaka.assignment.storage.AssignmentSubmissionArchiveStorage;
 import com.tikitaka.notification.service.NotificationService;
@@ -83,6 +84,7 @@ public class AssignmentService {
     private final AssignmentRepository assignmentRepository;
     private final AssignmentFileRepository assignmentFileRepository;
     private final AssignmentSubmissionRepository assignmentSubmissionRepository;
+    private final AssignmentViewRepository assignmentViewRepository;
     private final SubmissionFileRepository submissionFileRepository;
     private final AssignmentGradeRepository assignmentGradeRepository;
     private final SpaceRepository spaceRepository;
@@ -202,7 +204,16 @@ public class AssignmentService {
                         currentUser.getId()
                 );
 
-        assignment.increaseViewCount();
+        boolean firstView = assignmentViewRepository.insertIfAbsent(
+                currentUser.getId(),
+                assignmentId
+        ) == 1;
+
+        if (firstView && assignmentRepository.increaseViewCount(assignmentId) == 0) {
+            throw new BusinessException(AssignmentErrorCode.ASSIGNMENT_NOT_FOUND);
+        }
+
+        Integer viewCount = assignmentRepository.findViewCountById(assignmentId);
 
         List<AssignmentFileResponse> files =
                 assignmentFileRepository
@@ -253,7 +264,7 @@ public class AssignmentService {
                 assignment.getSpace()
                         .getProfessor()
                         .getName(),
-                assignment.getViewCount(),
+                viewCount,
                 files,
                 assignment.getDueAt(),
                 statusOf(assignment),
