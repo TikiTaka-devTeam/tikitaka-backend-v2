@@ -3,13 +3,17 @@ package com.tikitaka.search.controller;
 import java.util.List;
 import java.util.UUID;
 
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.tikitaka.search.dto.request.RecentSearchRequest;
 import com.tikitaka.search.dto.response.RecentItemsResponse;
 import com.tikitaka.search.dto.response.RecentSearchResponse;
 import com.tikitaka.search.dto.response.SearchMessageResponse;
@@ -31,6 +35,16 @@ public class SearchHistoryController {
 
     public SearchHistoryController(SearchHistoryService searchHistoryService) {
         this.searchHistoryService = searchHistoryService;
+    }
+
+    @Operation(summary = "SCH-006 최근 검색어 저장", description = "확정한 검색어를 저장합니다. 동일 검색어는 검색 시각을 갱신하며 사용자별 최신 10개를 유지합니다.")
+    @PostMapping("/recent")
+    public ResponseEntity<Void> saveRecentSearch(
+            @AuthenticationPrincipal AuthenticatedUser authenticatedUser,
+            @RequestBody RecentSearchRequest request
+    ) {
+        searchHistoryService.saveRecentSearch(authenticatedUser.userId(), request.keyword());
+        return ResponseEntity.noContent().build();
     }
 
     @Operation(summary = "SCH-002 최근 검색어 조회", description = "본인의 최근 검색어를 최신 검색순으로 최대 10개 조회합니다.")

@@ -8,6 +8,7 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.when;
 
 import java.sql.ResultSet;
@@ -79,6 +80,7 @@ class SearchServiceTests {
             assertThat(document.thumbnailUrl()).isEqualTo(thumbnailUrl);
         });
         verify(documentStorage).presignedGetUrl(thumbnailKey);
+        verify(jdbcTemplate, never()).update(anyString(), any(Object[].class));
     }
 
     @Test

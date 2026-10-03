@@ -39,10 +39,9 @@ public class SearchService {
         this.documentStorage = documentStorage;
     }
 
-    @Transactional
+    @Transactional(readOnly = true)
     public SearchResponse search(UUID userId, String rawKeyword) {
         String keyword = normalizeKeyword(rawKeyword);
-        saveRecentSearch(userId, keyword);
 
         List<SearchDocumentResponse> documents = jdbcTemplate.query("""
                 SELECT d.id, d.space_id, s.space_name, d.title, d.thumbnail_key, d.created_at
@@ -119,24 +118,6 @@ public class SearchService {
                 .replace("\\", "\\\\")
                 .replace("%", "\\%")
                 .replace("_", "\\_") + "%";
-    }
-
-    private void saveRecentSearch(UUID userId, String keyword) {
-        jdbcTemplate.update("""
-                INSERT INTO recent_searches (id, user_id, keyword, searched_at)
-                VALUES (?, ?, ?, NOW())
-                ON CONFLICT (user_id, keyword)
-                DO UPDATE SET searched_at = EXCLUDED.searched_at
-                """, UUID.randomUUID(), userId, keyword);
-        jdbcTemplate.update("""
-                DELETE FROM recent_searches
-                WHERE id IN (
-                  SELECT id FROM recent_searches
-                  WHERE user_id = ?
-                  ORDER BY searched_at DESC, id DESC
-                  OFFSET 10
-                )
-                """, userId);
     }
 
     private Map<UUID, List<SearchCategoryResponse>> findCategories(List<QuestionRow> questions) {

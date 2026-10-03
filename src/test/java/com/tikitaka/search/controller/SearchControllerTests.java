@@ -12,10 +12,25 @@ import org.junit.jupiter.api.Test;
 
 import com.tikitaka.global.security.AuthenticatedUser;
 import com.tikitaka.search.dto.response.SearchResponse;
+import com.tikitaka.search.dto.request.RecentSearchRequest;
 import com.tikitaka.search.service.SearchHistoryService;
 import com.tikitaka.search.service.SearchService;
 
 class SearchControllerTests {
+
+    @Test
+    void savesConfirmedKeywordForAuthenticatedUserAndReturnsNoContent() {
+        SearchHistoryService service = mock(SearchHistoryService.class);
+        SearchHistoryController controller = new SearchHistoryController(service);
+        UUID userId = UUID.randomUUID();
+
+        var response = controller.saveRecentSearch(
+                new AuthenticatedUser(userId), new RecentSearchRequest("자료"));
+
+        verify(service).saveRecentSearch(userId, "자료");
+        assertThat(response.getStatusCode().value()).isEqualTo(204);
+        assertThat(response.getBody()).isNull();
+    }
 
     @Test
     void passesAuthenticatedUserIdToIntegratedSearch() {

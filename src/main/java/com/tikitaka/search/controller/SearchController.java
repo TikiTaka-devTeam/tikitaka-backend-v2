@@ -27,7 +27,7 @@ public class SearchController {
         this.searchService = searchService;
     }
 
-    @Operation(summary = "SCH-001 통합 검색", description = "APPROVED 멤버로 참여 중인 Space의 강의자료, 공지사항, 질문을 통합 검색하고 최근 검색어를 갱신합니다.")
+    @Operation(summary = "SCH-001 통합 검색", description = "APPROVED 멤버로 참여 중인 Space의 강의자료, 공지사항, 질문을 통합 검색합니다. 입력 중 실시간 검색에도 사용하며 최근 검색어는 저장하지 않습니다.")
     @GetMapping
     public SearchResponse search(
             @AuthenticationPrincipal AuthenticatedUser authenticatedUser,
