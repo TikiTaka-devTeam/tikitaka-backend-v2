@@ -10,6 +10,7 @@ public record DashboardAssignmentItem(
         @JsonProperty("space_id") UUID spaceId,
         @JsonProperty("space_name") String spaceName,
         String title,
-        @JsonProperty("due_at") Instant dueAt
+        @JsonProperty("due_at") Instant dueAt,
+        String status
 ) {
 }
