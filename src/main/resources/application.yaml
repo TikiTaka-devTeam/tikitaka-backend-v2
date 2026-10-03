@@ -46,7 +46,7 @@ aws:
           - image/png
           - image/webp
       lecture-document:
-        max-file-size: ${LECTURE_DOCUMENT_MAX_FILE_SIZE:10MB}
+        max-file-size: ${LECTURE_DOCUMENT_MAX_FILE_SIZE:20MB}
         max-request-size: ${LECTURE_DOCUMENT_MAX_REQUEST_SIZE:10MB}
         max-file-count: 1
         allowed-content-types:
