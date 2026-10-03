@@ -26,6 +26,8 @@ import com.tikitaka.space.dto.response.SpaceStatusResponse;
 import com.tikitaka.space.dto.response.SpaceUpdateResponse;
 import com.tikitaka.notification.service.NotificationService;
 import com.tikitaka.space.entity.Schedule;
+import com.tikitaka.space.entity.PermissionType;
+import com.tikitaka.space.entity.SpaceMemberPermission;
 import com.tikitaka.space.entity.Space;
 import com.tikitaka.space.entity.SpaceColorKey;
 import com.tikitaka.space.entity.SpaceMember;
@@ -33,6 +35,7 @@ import com.tikitaka.space.entity.SpaceMemberRole;
 import com.tikitaka.space.entity.SpaceMemberStatus;
 import com.tikitaka.space.exception.SpaceErrorCode;
 import com.tikitaka.space.repository.ScheduleRepository;
+import com.tikitaka.space.repository.SpaceMemberPermissionRepository;
 import com.tikitaka.space.repository.SpaceMemberRepository;
 import com.tikitaka.space.repository.SpaceRepository;
 import com.tikitaka.user.entity.AccountType;
@@ -60,6 +63,7 @@ public class SpaceService {
     private final SpaceMemberRepository spaceMemberRepository;
     private final ScheduleRepository scheduleRepository;
     private final NotificationService notificationService;
+    private final SpaceMemberPermissionRepository permissionRepository;
 
     @Transactional
     public SpaceCreateResponse createSpace(
@@ -835,8 +839,24 @@ public class SpaceService {
                 getScheduleResponses(space.getId()),
                 member.getColorKey(),
                 spaceCode,
-                status
+                status,
+                member.getRole() == SpaceMemberRole.PROFESSOR ? null : member.getRole(),
+                permissionsForResponse(member)
         );
+    }
+
+    private List<PermissionType> permissionsForResponse(SpaceMember member) {
+        if (member.getRole() == SpaceMemberRole.PROFESSOR) {
+            return null;
+        }
+        if (member.getRole() != SpaceMemberRole.ASSISTANT) {
+            return List.of();
+        }
+        return permissionRepository.findAllBySpaceMemberId(member.getId())
+                .stream()
+                .map(SpaceMemberPermission::getPermission)
+                .sorted()
+                .toList();
     }
 
     private List<ScheduleResponse> getScheduleResponses(UUID spaceId) {
