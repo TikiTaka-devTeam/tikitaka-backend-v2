@@ -65,7 +65,7 @@ public class DashboardService {
 
     public DashboardAssignmentsResponse getAssignments(UUID userId) {
         return new DashboardAssignmentsResponse(
-                dashboardAssignmentRepository.findOpenAssignments(userId)
+                dashboardAssignmentRepository.findAssignments(userId)
         );
     }
 
