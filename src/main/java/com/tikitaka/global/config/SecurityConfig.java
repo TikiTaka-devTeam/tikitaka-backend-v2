@@ -4,6 +4,7 @@ import java.time.Clock;
 import java.util.List;
 
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.Customizer;
@@ -27,6 +28,14 @@ import com.tikitaka.global.security.RestAuthenticationEntryPoint;
 @Configuration
 @EnableConfigurationProperties({JwtProperties.class, CorsProperties.class})
 public class SecurityConfig {
+    @Bean
+    FilterRegistrationBean<JwtAuthenticationFilter> jwtFilterRegistration(JwtAuthenticationFilter filter) {
+        FilterRegistrationBean<JwtAuthenticationFilter> registration = new FilterRegistrationBean<>(filter);
+        // JWT authentication belongs to the API security chain, not every servlet request.
+        registration.setEnabled(false);
+        return registration;
+    }
+
     @Bean
     SecurityFilterChain securityFilterChain(
             HttpSecurity http,
