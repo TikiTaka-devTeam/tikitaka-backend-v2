@@ -1,6 +1,8 @@
 package com.tikitaka.document.storage;
 
 import java.net.URI;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 
 import org.springframework.beans.factory.ObjectProvider;
@@ -19,6 +21,7 @@ import software.amazon.awssdk.core.ResponseBytes;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
+import software.amazon.awssdk.services.s3.model.CopyObjectRequest;
 import software.amazon.awssdk.services.s3.S3Configuration;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectResponse;
@@ -49,6 +52,17 @@ public class DocumentStorage {
                             .contentLength((long) content.length)
                             .build(),
                     RequestBody.fromBytes(content));
+        } catch (S3Exception | SdkClientException exception) {
+            throw new BusinessException(CommonErrorCode.S3_UPLOAD_FAILED, exception);
+        }
+    }
+
+    public void copy(String sourceKey, String targetKey) {
+        try {
+            String source = URLEncoder.encode(properties.getBucket() + "/" + sourceKey, StandardCharsets.UTF_8)
+                    .replace("+", "%20").replace("%2F", "/");
+            client().copyObject(CopyObjectRequest.builder()
+                    .copySource(source).bucket(properties.getBucket()).key(targetKey).build());
         } catch (S3Exception | SdkClientException exception) {
             throw new BusinessException(CommonErrorCode.S3_UPLOAD_FAILED, exception);
         }

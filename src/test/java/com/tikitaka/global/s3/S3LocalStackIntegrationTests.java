@@ -7,6 +7,8 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.beans.factory.support.DefaultListableBeanFactory;
+import com.tikitaka.document.storage.DocumentStorage;
 import org.testcontainers.containers.localstack.LocalStackContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -53,6 +55,27 @@ class S3LocalStackIntegrationTests {
         if (s3Client != null) {
             s3Client.close();
         }
+    }
+
+    @Test
+    void documentThumbnailCopyPreservesBytesAndSurvivesSourceCleanup() {
+        S3Properties properties = new S3Properties();
+        properties.setBucket(BUCKET);
+        DefaultListableBeanFactory beans = new DefaultListableBeanFactory();
+        beans.registerSingleton("s3Client", s3Client);
+        DocumentStorage storage = new DocumentStorage(beans.getBeanProvider(S3Client.class), properties);
+        String source = "documents/source/강의 자료+1.png";
+        String target = "documents/completed/강의 썸네일.png";
+        byte[] png = {1, 2, 3};
+
+        storage.put(source, png, "image/png");
+        storage.copy(source, target);
+        storage.delete(source);
+
+        assertThat(storage.get(target)).isEqualTo(png);
+        assertThat(s3Client.headObject(HeadObjectRequest.builder().bucket(BUCKET).key(target).build())
+                .contentType()).isEqualTo("image/png");
+        storage.delete(target);
     }
 
     @Test

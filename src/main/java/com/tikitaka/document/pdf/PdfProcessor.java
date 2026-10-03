@@ -3,8 +3,10 @@ package com.tikitaka.document.pdf;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
+import java.util.Set;
+import java.util.stream.IntStream;
 
 import javax.imageio.ImageIO;
 
@@ -34,6 +36,13 @@ public class PdfProcessor {
     }
 
     public ProcessedPdf process(byte[] bytes) {
+        SelectedPdf result = processSelected(bytes, null);
+        return new ProcessedPdf(bytes, IntStream.range(0, result.pageCount())
+                .mapToObj(result.pageThumbnails()::get).toList());
+    }
+
+    /** Render only requested zero-based page indices; an empty set validates without rendering. */
+    public SelectedPdf processSelected(byte[] bytes, Set<Integer> pageIndices) {
         try {
             validateSignature(bytes);
             try (PDDocument document = Loader.loadPDF(bytes)) {
@@ -50,12 +59,18 @@ public class PdfProcessor {
                 }
 
                 PDFRenderer renderer = new PDFRenderer(document);
-                List<byte[]> thumbnails = new ArrayList<>(pageCount);
-                for (int index = 0; index < pageCount; index++) {
-                    BufferedImage image = renderer.renderImageWithDPI(index, THUMBNAIL_DPI, ImageType.RGB);
-                    thumbnails.add(toPng(image));
+                Set<Integer> selected = pageIndices == null
+                        ? IntStream.range(0, pageCount).boxed().collect(java.util.stream.Collectors.toSet())
+                        : pageIndices;
+                if (selected.stream().anyMatch(index -> index == null || index < 0 || index >= pageCount)) {
+                    throw new BusinessException(DocumentErrorCode.INVALID_PDF_FILE);
                 }
-                return new ProcessedPdf(bytes, thumbnails);
+                Map<Integer, byte[]> thumbnails = new HashMap<>();
+                for (int index : selected) {
+                    BufferedImage image = renderer.renderImageWithDPI(index, THUMBNAIL_DPI, ImageType.RGB);
+                    thumbnails.put(index, toPng(image));
+                }
+                return new SelectedPdf(pageCount, thumbnails);
             }
         } catch (InvalidPasswordException exception) {
             throw new BusinessException(DocumentErrorCode.ENCRYPTED_PDF_NOT_SUPPORTED, exception);

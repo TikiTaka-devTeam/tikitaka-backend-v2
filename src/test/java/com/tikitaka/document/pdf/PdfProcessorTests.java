@@ -19,6 +19,33 @@ class PdfProcessorTests {
     private final PdfProcessor processor = new PdfProcessor();
 
     @Test
+    void selectedRenderingMatchesFullRenderingWithoutCreatingOtherImages() throws Exception {
+        byte[] pdf = pdfFile(4, false).getBytes();
+        ProcessedPdf full = processor.process(pdf);
+        SelectedPdf selected = processor.processSelected(pdf, java.util.Set.of(2));
+        assertThat(selected.pageCount()).isEqualTo(4);
+        assertThat(selected.pageThumbnails()).containsOnlyKeys(2);
+        assertThat(selected.pageThumbnails().get(2)).isEqualTo(full.pageThumbnails().get(2));
+        SelectedPdf validationOnly = processor.processSelected(pdf, java.util.Set.of());
+        assertThat(validationOnly.pageCount()).isEqualTo(4);
+        assertThat(validationOnly.pageThumbnails()).isEmpty();
+    }
+
+    @Test
+    void selectedRenderingKeepsPageLimitAndEncryptionChecks() throws Exception {
+        byte[] oversized = pdfFile(301, false).getBytes();
+        assertThatThrownBy(() -> processor.processSelected(oversized, java.util.Set.of()))
+                .isInstanceOf(BusinessException.class)
+                .extracting(exception -> ((BusinessException) exception).getErrorCode())
+                .isEqualTo(DocumentErrorCode.PDF_PAGE_LIMIT_EXCEEDED);
+        byte[] encrypted = pdfFile(1, true).getBytes();
+        assertThatThrownBy(() -> processor.processSelected(encrypted, java.util.Set.of()))
+                .isInstanceOf(BusinessException.class)
+                .extracting(exception -> ((BusinessException) exception).getErrorCode())
+                .isEqualTo(DocumentErrorCode.ENCRYPTED_PDF_NOT_SUPPORTED);
+    }
+
+    @Test
     void calculatesPageCountAndCreatesPngThumbnails() throws Exception {
         MockMultipartFile file = pdfFile(2, false);
 
@@ -55,7 +82,7 @@ class PdfProcessorTests {
         try (PDDocument document = new PDDocument();
              ByteArrayOutputStream output = new ByteArrayOutputStream()) {
             for (int index = 0; index < pageCount; index++) {
-                document.addPage(new PDPage());
+                document.addPage(new PDPage(new org.apache.pdfbox.pdmodel.common.PDRectangle(612 + index * 2, 792)));
             }
             if (encrypted) {
                 StandardProtectionPolicy policy = new StandardProtectionPolicy(

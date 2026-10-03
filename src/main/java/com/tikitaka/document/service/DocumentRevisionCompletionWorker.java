@@ -5,6 +5,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.HashSet;
+import java.util.Set;
 
 import org.springframework.http.MediaType;
 import org.springframework.scheduling.annotation.Async;
@@ -21,7 +23,7 @@ import com.tikitaka.document.entity.RevisionSourceType;
 import com.tikitaka.document.entity.RevisionStatus;
 import com.tikitaka.document.entity.Slide;
 import com.tikitaka.document.pdf.PdfProcessor;
-import com.tikitaka.document.pdf.ProcessedPdf;
+import com.tikitaka.document.pdf.SelectedPdf;
 import com.tikitaka.document.pdf.RevisionPdfComposer;
 import com.tikitaka.document.repository.DocumentRevisionRepository;
 import com.tikitaka.document.repository.RevisionPageRepository;
@@ -110,6 +112,7 @@ public class DocumentRevisionCompletionWorker {
             }
         }
 
+        long stageStarted = System.nanoTime();
         byte[] composedPdf =
                 pdfComposer.compose(
                         storage.get(document.getPdfKey()),
@@ -121,10 +124,24 @@ public class DocumentRevisionCompletionWorker {
                         sourcePageNumbers
                 );
 
-        ProcessedPdf processed =
-                pdfProcessor.process(composedPdf);
-
-        byte[] finalPdfBytes = processed.originalBytes();
+        log.info("Revision PDF composition completed. revisionId={}, elapsedMs={}",
+                revisionId, elapsedMillis(stageStarted));
+        List<RevisionPage> outputPages = pages.stream()
+                .filter(page -> page.getSourceType() != RevisionSourceType.REVISION
+                        || page.getStatus() != RevisionPageStatus.DELETE_PENDING)
+                .toList();
+        Set<Integer> renderIndices = new HashSet<>();
+        for (int index = 0; index < outputPages.size(); index++) {
+            if (outputPages.get(index).getStatus() == RevisionPageStatus.DELETE_PENDING) {
+                renderIndices.add(index);
+            }
+        }
+        stageStarted = System.nanoTime();
+        SelectedPdf processed = pdfProcessor.processSelected(composedPdf, renderIndices);
+        log.info("Revision thumbnail processing completed. revisionId={}, pageCount={}, renderedPages={}, elapsedMs={}",
+                revisionId, processed.pageCount(), renderIndices.size(), elapsedMillis(stageStarted));
+        byte[] finalPdfBytes = composedPdf;
+        stageStarted = System.nanoTime();
 
         String root =
                 "documents/"
@@ -152,13 +169,6 @@ public class DocumentRevisionCompletionWorker {
                 MediaType.APPLICATION_PDF_VALUE
         );
 
-        put(
-                uploadedKeys,
-                documentThumbnailKey,
-                processed.pageThumbnails().get(0),
-                MediaType.IMAGE_PNG_VALUE
-        );
-
         Map<UUID, String> changedSlideThumbnailKeys =
                 new HashMap<>();
 
@@ -182,12 +192,11 @@ public class DocumentRevisionCompletionWorker {
                                         ".png"
                                 );
 
-                put(
-                        uploadedKeys,
-                        key,
-                        processed.pageThumbnails().get(outputIndex),
-                        MediaType.IMAGE_PNG_VALUE
-                );
+                if (page.getSourceType() == RevisionSourceType.REVISION) {
+                    copy(uploadedKeys, page.getRevisionSlide().getThumbnailKey(), key);
+                } else {
+                    put(uploadedKeys, key, processed.pageThumbnails().get(outputIndex), MediaType.IMAGE_PNG_VALUE);
+                }
 
                 changedSlideThumbnailKeys.put(
                         page.getId(),
@@ -197,6 +206,15 @@ public class DocumentRevisionCompletionWorker {
 
             outputIndex++;
         }
+
+        RevisionPage firstPage = outputPages.get(0);
+        String firstThumbnailKey = changedSlideThumbnailKeys.get(firstPage.getId());
+        if (firstThumbnailKey == null) {
+            firstThumbnailKey = firstPage.getOriginalSlide().getThumbnailKey();
+        }
+        // Keep a separate document thumbnail so future cleanup cannot delete a live slide image.
+        copy(uploadedKeys, firstThumbnailKey, documentThumbnailKey);
+        log.info("Revision storage writes completed. revisionId={}, elapsedMs={}", revisionId, elapsedMillis(stageStarted));
 
         List<String> obsoleteKeys =
                 new ArrayList<>(
@@ -322,6 +340,15 @@ public class DocumentRevisionCompletionWorker {
     ) {
         storage.put(key, content, contentType);
         uploadedKeys.add(key);
+    }
+
+    private void copy(List<String> uploadedKeys, String sourceKey, String targetKey) {
+        storage.copy(sourceKey, targetKey);
+        uploadedKeys.add(targetKey);
+    }
+
+    private long elapsedMillis(long started) {
+        return (System.nanoTime() - started) / 1_000_000;
     }
 
     private void cleanup(List<String> keys) {

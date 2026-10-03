@@ -16,6 +16,7 @@ import com.tikitaka.global.s3.S3Properties;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
+import software.amazon.awssdk.services.s3.model.CopyObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
 class DocumentStorageTests {
@@ -45,6 +46,17 @@ class DocumentStorageTests {
         assertThat(request.getValue().bucket()).isEqualTo("test-bucket");
         assertThat(request.getValue().key()).isEqualTo("documents/file.pdf");
         assertThat(request.getValue().contentType()).isEqualTo("application/pdf");
+    }
+
+    @Test
+    void copiesExistingThumbnailWithEncodedKoreanAndSpecialCharacters() {
+        storage.copy("documents/강의 자료+1.png", "documents/completed/copy.png");
+        ArgumentCaptor<CopyObjectRequest> request = ArgumentCaptor.forClass(CopyObjectRequest.class);
+        verify(s3Client).copyObject(request.capture());
+        assertThat(request.getValue().copySource())
+                .isEqualTo("test-bucket/documents/%EA%B0%95%EC%9D%98%20%EC%9E%90%EB%A3%8C%2B1.png");
+        assertThat(request.getValue().bucket()).isEqualTo("test-bucket");
+        assertThat(request.getValue().key()).isEqualTo("documents/completed/copy.png");
     }
 
     @Test
