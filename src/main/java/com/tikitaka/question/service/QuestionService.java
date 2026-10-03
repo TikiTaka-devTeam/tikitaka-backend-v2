@@ -1178,6 +1178,8 @@ public class QuestionService {
                                 .append('\n')
                 );
 
+        csv.insert(0, '\uFEFF');
+
         return new ExportResponse(
                 "data:text/csv;base64,"
                         + Base64
