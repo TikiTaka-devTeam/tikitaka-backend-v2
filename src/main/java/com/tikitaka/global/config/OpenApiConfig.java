@@ -11,8 +11,6 @@ import java.util.regex.Pattern;
 import org.springdoc.core.customizers.OpenApiCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.security.config.annotation.web.builders.WebSecurity;
-import org.springframework.security.config.annotation.web.configuration.WebSecurityCustomizer;
 
 import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.OpenAPI;
@@ -110,11 +108,4 @@ public class OpenApiConfig {
         }
     }
 
-    @Bean
-    WebSecurityCustomizer swaggerWebSecurityCustomizer() {
-        return (WebSecurity web) -> web.ignoring().requestMatchers(
-                "/swagger-ui/**",
-                "/swagger-ui.html",
-                "/v3/api-docs/**");
-    }
 }
