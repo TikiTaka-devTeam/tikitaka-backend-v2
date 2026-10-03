@@ -139,6 +139,11 @@ public class QuestionAiProcessingService {
                                                             .getId()
                                             )
                                             .stream()
+                                            .filter(category ->
+                                                    !category.getName().equalsIgnoreCase(
+                                                            QuestionCategory.FALLBACK_NAME
+                                                    )
+                                            )
                                             .map(
                                                     category ->
                                                             new QuestionAnalyzeRequest
@@ -304,10 +309,18 @@ public class QuestionAiProcessingService {
                 );
 
         if (selectedCategories.isEmpty()) {
-
-            throw new IllegalStateException(
-                    "COURSE_RELATED question must have at least one category above threshold."
-            );
+            QuestionCategory fallbackCategory =
+                    questionCategoryRepository
+                            .findByDocumentIdAndNameAndDeletedFalse(
+                                    question.getDocument().getId(),
+                                    QuestionCategory.FALLBACK_NAME
+                            )
+                            .orElseGet(() -> questionCategoryRepository.save(
+                                    QuestionCategory.createFallback(
+                                            question.getDocument()
+                                    )
+                            ));
+            selectedCategories = List.of(fallbackCategory);
         }
 
         questionCategoryMappingRepository
@@ -350,6 +363,10 @@ public class QuestionAiProcessingService {
         List<QuestionCategory> categories =
                 new ArrayList<>();
 
+        if (categoryResults == null || categoryResults.isEmpty()) {
+            return categories;
+        }
+
         for (
                 QuestionCategoryResult result
                 : categoryResults
@@ -378,6 +395,12 @@ public class QuestionAiProcessingService {
                     question,
                     category
             );
+
+            if (category.getName().equalsIgnoreCase(
+                    QuestionCategory.FALLBACK_NAME
+            )) {
+                continue;
+            }
 
             categories.add(
                     category
@@ -476,16 +499,7 @@ public class QuestionAiProcessingService {
             );
         }
 
-        if (response.categories()
-                == null
-                || response
-                .categories()
-                .isEmpty()) {
-
-            throw new IllegalStateException(
-                    "COURSE_RELATED question must have categories."
-            );
-        }
+        // An empty category result falls back to the document's "기타" category.
     }
 
     private Question getQuestion(

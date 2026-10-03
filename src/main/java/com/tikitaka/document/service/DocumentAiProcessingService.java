@@ -175,6 +175,15 @@ public class DocumentAiProcessingService {
             );
         }
 
+        incomingByName.putIfAbsent(
+                normalizedKey(QuestionCategory.FALLBACK_NAME),
+                new DocumentCategoryResult(
+                        QuestionCategory.FALLBACK_NAME,
+                        QuestionCategory.FALLBACK_DESCRIPTION,
+                        List.of()
+                )
+        );
+
         List<QuestionCategory>
                 existingCategories =
                 questionCategoryRepository

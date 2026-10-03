@@ -32,6 +32,9 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class QuestionCategory extends BaseTimeEntity {
 
+    public static final String FALLBACK_NAME = "기타";
+    public static final String FALLBACK_DESCRIPTION = "다른 카테고리로 분류하기 어려운 강의 관련 질문";
+
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
@@ -120,6 +123,15 @@ public class QuestionCategory extends BaseTimeEntity {
                 null,
                 CategorySourceType.AI,
                 sourcePages
+        );
+    }
+
+    public static QuestionCategory createFallback(Document document) {
+        return createByAi(
+                document,
+                FALLBACK_NAME,
+                FALLBACK_DESCRIPTION,
+                null
         );
     }
 
