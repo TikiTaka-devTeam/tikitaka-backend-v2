@@ -101,10 +101,7 @@ public class SpaceMemberService {
             UUID memberId,
             User currentUser
     ) {
-        requireMemberManagePermission(
-                spaceId,
-                currentUser
-        );
+        SpaceMember actor = getApprovedMember(spaceId, currentUser.getId());
 
         SpaceMember target =
                 getMemberInSpace(
@@ -118,6 +115,18 @@ public class SpaceMemberService {
             throw new BusinessException(
                     SpaceMemberErrorCode.MEMBER_NOT_FOUND
             );
+        }
+
+        boolean professor = actor.getRole() == SpaceMemberRole.PROFESSOR;
+        boolean assistantWithManagePermission = actor.getRole() == SpaceMemberRole.ASSISTANT
+                && hasMemberManagePermission(actor);
+        boolean studentAllowedTarget = actor.getRole() == SpaceMemberRole.STUDENT
+                && (actor.getId().equals(target.getId())
+                || target.getRole() == SpaceMemberRole.PROFESSOR
+                || target.getRole() == SpaceMemberRole.ASSISTANT);
+
+        if (!professor && !assistantWithManagePermission && !studentAllowedTarget) {
+            throw new BusinessException(SpaceMemberErrorCode.MEMBER_MANAGE_FORBIDDEN);
         }
 
         User user =
