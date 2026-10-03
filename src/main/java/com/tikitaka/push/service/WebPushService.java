@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.UUID;
 
 import org.apache.http.HttpResponse;
+import org.apache.http.util.EntityUtils;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -17,6 +18,7 @@ import com.tikitaka.push.exception.PushErrorCode;
 import com.tikitaka.push.repository.PushSubscriptionRepository;
 
 import lombok.extern.slf4j.Slf4j;
+import nl.martijndwars.webpush.Encoding;
 import nl.martijndwars.webpush.Notification;
 import nl.martijndwars.webpush.PushService;
 import tools.jackson.databind.ObjectMapper;
@@ -99,19 +101,32 @@ public class WebPushService {
                     payload.getBytes(StandardCharsets.UTF_8)
             );
 
-            HttpResponse response = pushService.send(notification);
+            HttpResponse response = pushService.send(notification, Encoding.AES128GCM);
             int status = response.getStatusLine().getStatusCode();
 
             if (status == 404 || status == 410) {
                 pushSubscriptionRepository.delete(subscription);
+                log.warn(
+                        "Web Push subscription removed after provider response. status={}, subscriptionId={}",
+                        status,
+                        subscription.getId()
+                );
                 return;
             }
 
             if (status < 200 || status >= 300) {
+                String responseBody = response.getEntity() == null
+                        ? ""
+                        : EntityUtils.toString(response.getEntity(), StandardCharsets.UTF_8);
+                responseBody = responseBody.replaceAll("\\s+", " ").trim();
+                if (responseBody.length() > 512) {
+                    responseBody = responseBody.substring(0, 512);
+                }
                 log.warn(
-                        "Web Push delivery failed. status={}, subscriptionId={}",
+                        "Web Push delivery failed. status={}, subscriptionId={}, providerResponse={}",
                         status,
-                        subscription.getId()
+                        subscription.getId(),
+                        responseBody
                 );
             }
         } catch (InterruptedException exception) {
