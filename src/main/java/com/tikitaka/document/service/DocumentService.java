@@ -338,10 +338,20 @@ public class DocumentService {
                 currentUser
         );
 
+        recordDocumentView(document, currentUser);
+
+        return new DocumentDownloadResponse(
+                storage.presignedGetUrl(
+                        document.getPdfKey()
+                )
+        );
+    }
+
+    private void recordDocumentView(Document document, User currentUser) {
         recentDocumentViewRepository
                 .findByUserIdAndDocumentId(
                         currentUser.getId(),
-                        documentId
+                        document.getId()
                 )
                 .ifPresentOrElse(
 
@@ -356,13 +366,9 @@ public class DocumentService {
                                 )
                 );
 
-        return new DocumentDownloadResponse(
-                storage.presignedGetUrl(
-                        document.getPdfKey()
-                )
-        );
     }
 
+    @Transactional
     public DocumentSlidesResponse getSlides(
             UUID documentId,
             User currentUser
@@ -377,6 +383,8 @@ public class DocumentService {
                         .getId(),
                 currentUser
         );
+
+        recordDocumentView(document, currentUser);
 
         List<DocumentSlideResponse> slides =
                 slideRepository

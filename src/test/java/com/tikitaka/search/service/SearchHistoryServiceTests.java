@@ -1,6 +1,7 @@
 package com.tikitaka.search.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
@@ -11,11 +12,39 @@ import java.util.List;
 import java.util.UUID;
 
 import com.tikitaka.document.storage.DocumentStorage;
+import com.tikitaka.global.exception.BusinessException;
+import com.tikitaka.global.exception.CommonErrorCode;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 
 class SearchHistoryServiceTests {
+    @Test
+    void savesTrimmedKeywordForUserAndPrunesOldHistory() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        UUID userId = UUID.randomUUID();
+        new SearchHistoryService(jdbc, mock(DocumentStorage.class))
+                .saveRecentSearch(userId, " 자료 ");
+
+        verify(jdbc).update(contains("ON CONFLICT (user_id, keyword)"),
+                any(UUID.class), eq(userId), eq("자료"));
+        verify(jdbc).update(contains("OFFSET 10"), eq(userId));
+        verifyNoMoreInteractions(jdbc);
+    }
+
+    @Test
+    void rejectsInvalidKeywordsWithoutWritingHistory() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        SearchHistoryService service = new SearchHistoryService(jdbc, mock(DocumentStorage.class));
+        for (String keyword : new String[] {null, "", "   ", "가".repeat(256)}) {
+            assertThatExceptionOfType(BusinessException.class)
+                    .isThrownBy(() -> service.saveRecentSearch(UUID.randomUUID(), keyword))
+                    .satisfies(exception -> assertThat(exception.getErrorCode())
+                            .isEqualTo(CommonErrorCode.INVALID_INPUT));
+        }
+        verifyNoInteractions(jdbc);
+    }
+
     @Test
     @SuppressWarnings("unchecked")
     void returnsDocumentAndSlideUrlsAndRetainsQuestionsWithoutSlides() throws Exception {
