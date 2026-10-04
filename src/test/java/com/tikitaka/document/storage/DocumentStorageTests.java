@@ -17,6 +17,11 @@ import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.model.ListObjectsV2Request;
+import software.amazon.awssdk.services.s3.model.ListObjectsV2Response;
+import software.amazon.awssdk.services.s3.model.S3Object;
+import software.amazon.awssdk.services.s3.paginators.ListObjectsV2Iterable;
+import java.time.Instant;
 
 class DocumentStorageTests {
     private final S3Client s3Client = mock(S3Client.class);
@@ -54,6 +59,30 @@ class DocumentStorageTests {
         ArgumentCaptor<DeleteObjectRequest> request = ArgumentCaptor.forClass(DeleteObjectRequest.class);
         verify(s3Client).deleteObject(request.capture());
         assertThat(request.getValue().key()).isEqualTo("documents/file.pdf");
+    }
+
+    @Test
+    void cleanupDeletesOnlyExpiredObjectsAndFollowsPagination() {
+        Instant cutoff = Instant.parse("2026-10-04T00:00:00Z");
+        when(s3Client.listObjectsV2(any(ListObjectsV2Request.class))).thenReturn(
+                ListObjectsV2Response.builder().isTruncated(true).nextContinuationToken("next")
+                        .contents(S3Object.builder().key("exports/old.pdf").lastModified(cutoff.minusSeconds(1)).build(),
+                                S3Object.builder().key("exports/new.pdf").lastModified(cutoff.plusSeconds(1)).build())
+                        .build(),
+                ListObjectsV2Response.builder().isTruncated(false)
+                        .contents(S3Object.builder().key("exports/older.pdf").lastModified(cutoff.minusSeconds(60)).build())
+                        .build());
+        when(s3Client.listObjectsV2Paginator(any(ListObjectsV2Request.class))).thenAnswer(invocation ->
+                new ListObjectsV2Iterable(s3Client, invocation.getArgument(0)));
+        storage.deleteOlderThan("exports/", cutoff);
+        ArgumentCaptor<DeleteObjectRequest> deleted = ArgumentCaptor.forClass(DeleteObjectRequest.class);
+        org.mockito.Mockito.verify(s3Client, org.mockito.Mockito.times(2)).deleteObject(deleted.capture());
+        assertThat(deleted.getAllValues()).extracting(DeleteObjectRequest::key)
+                .containsExactly("exports/old.pdf", "exports/older.pdf");
+        ArgumentCaptor<ListObjectsV2Request> listed = ArgumentCaptor.forClass(ListObjectsV2Request.class);
+        org.mockito.Mockito.verify(s3Client, org.mockito.Mockito.times(2)).listObjectsV2(listed.capture());
+        assertThat(listed.getAllValues()).extracting(ListObjectsV2Request::prefix).containsOnly("exports/");
+        assertThat(listed.getAllValues().get(1).continuationToken()).isEqualTo("next");
     }
 
     @Test
