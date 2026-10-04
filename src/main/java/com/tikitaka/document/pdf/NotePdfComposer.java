@@ -77,8 +77,9 @@ public class NotePdfComposer {
         Color color = Color.decode(stroke.color());
         stream.setStrokingColor(color);
         stream.setNonStrokingColor(color);
-        // Thickness uses PDF points, independent of the viewer's zoom level.
-        stream.setLineWidth((float) stroke.thickness());
+        // Stored thickness is a ratio of the displayed page's shorter side.
+        float thicknessPt = (float) (stroke.thickness() * Math.min(displayWidth, displayHeight));
+        stream.setLineWidth(thicknessPt);
         stream.setLineCapStyle(1);
         stream.setLineJoinStyle(1);
         Map<String, Double> first = stroke.points().get(0);
