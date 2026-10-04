@@ -1142,7 +1142,7 @@ public class QuestionService {
 
         StringBuilder csv =
                 new StringBuilder(
-                        "question_id,title,content,status,like_count,view_count\n"
+                        "categories,title,content,status,like_count,view_count\n"
                 );
 
         questions
@@ -1150,7 +1150,7 @@ public class QuestionService {
                         spaceId
                 )
                 .forEach(question ->
-                        csv.append(question.getId())
+                        csv.append(quote(exportCategoryNames(question)))
                                 .append(',')
                                 .append(
                                         quote(
@@ -1271,6 +1271,17 @@ public class QuestionService {
                                 slide.getThumbnailKey()
                         )
                 );
+    }
+
+    private String exportCategoryNames(Question question) {
+        List<String> names = mappings.findAllByQuestionId(question.getId()).stream()
+                .map(QuestionCategoryMapping::getCategory)
+                .filter(category -> !category.isDeleted())
+                .map(QuestionCategory::getName)
+                .distinct()
+                .sorted()
+                .toList();
+        return names.isEmpty() ? "미분류" : String.join(" | ", names);
     }
 
     private List<CategoryInfo> categoryInfo(
