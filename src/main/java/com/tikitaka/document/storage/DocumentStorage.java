@@ -2,6 +2,7 @@ package com.tikitaka.document.storage;
 
 import java.net.URI;
 import java.time.Duration;
+import java.time.Instant;
 
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
@@ -19,6 +20,7 @@ import software.amazon.awssdk.core.ResponseBytes;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
+import software.amazon.awssdk.services.s3.model.ListObjectsV2Request;
 import software.amazon.awssdk.services.s3.S3Configuration;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectResponse;
@@ -87,6 +89,20 @@ public class DocumentStorage {
                     .bucket(properties.getBucket())
                     .key(key)
                     .build());
+        } catch (S3Exception | SdkClientException exception) {
+            throw new BusinessException(CommonErrorCode.S3_DELETE_FAILED, exception);
+        }
+    }
+
+    public void deleteOlderThan(String prefix, Instant cutoff) {
+        try {
+            var request = ListObjectsV2Request.builder()
+                    .bucket(properties.getBucket()).prefix(prefix).build();
+            for (var page : client().listObjectsV2Paginator(request)) {
+                for (var object : page.contents()) {
+                    if (object.lastModified().isBefore(cutoff)) delete(object.key());
+                }
+            }
         } catch (S3Exception | SdkClientException exception) {
             throw new BusinessException(CommonErrorCode.S3_DELETE_FAILED, exception);
         }

@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.tikitaka.document.dto.response.DocumentCreateResponse;
+import com.tikitaka.document.dto.DocumentNoteType;
 import com.tikitaka.document.dto.response.DocumentDownloadResponse;
 import com.tikitaka.document.dto.response.DocumentListItemResponse;
 import com.tikitaka.document.dto.response.DocumentSlidesResponse;
@@ -81,10 +82,13 @@ public class DocumentController {
     @GetMapping("/api/v1/documents/{documentId}/download")
     public DocumentDownloadResponse downloadDocument(
             @PathVariable UUID documentId,
+            @RequestParam(name = "note_type", defaultValue = "NONE")
+            DocumentNoteType noteType,
             Authentication authentication
     ) {
         return documentService.downloadDocument(
                 documentId,
+                noteType,
                 currentUserResolver.resolve(authentication));
     }
 

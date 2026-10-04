@@ -15,6 +15,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import org.springframework.web.multipart.MultipartFile;
 
 import com.tikitaka.document.dto.response.DocumentCreateResponse;
+import com.tikitaka.document.dto.DocumentNoteType;
 import com.tikitaka.document.dto.response.DocumentDownloadResponse;
 import com.tikitaka.document.dto.response.DocumentListItemResponse;
 import com.tikitaka.document.dto.response.DocumentSlideResponse;
@@ -70,6 +71,7 @@ public class DocumentService {
     private final NotificationService notificationService;
 
     private final DocumentAiProcessingService documentAiProcessingService;
+    private final DocumentNoteExportService noteExportService;
 
     public List<DocumentListItemResponse> getDocuments(
             UUID spaceId,
@@ -327,6 +329,15 @@ public class DocumentService {
             UUID documentId,
             User currentUser
     ) {
+        return downloadDocument(documentId, DocumentNoteType.NONE, currentUser);
+    }
+
+    @Transactional
+    public DocumentDownloadResponse downloadDocument(
+            UUID documentId,
+            DocumentNoteType noteType,
+            User currentUser
+    ) {
         Document document =
                 getDocument(
                         documentId
@@ -342,7 +353,9 @@ public class DocumentService {
 
         return new DocumentDownloadResponse(
                 storage.presignedGetUrl(
-                        document.getPdfKey()
+                        noteType == DocumentNoteType.NONE
+                                ? document.getPdfKey()
+                                : noteExportService.export(document, currentUser, noteType)
                 )
         );
     }
@@ -461,7 +474,7 @@ public class DocumentService {
         );
 
         deleteAfterCommit(
-                keys
+                keys, documentId
         );
     }
 
@@ -631,7 +644,7 @@ public class DocumentService {
     }
 
     private void deleteAfterCommit(
-            List<String> keys
+            List<String> keys, UUID documentId
     ) {
         List<String> immutableKeys =
                 List.copyOf(keys);
@@ -647,6 +660,7 @@ public class DocumentService {
                                         immutableKeys,
                                         null
                                 );
+                                noteExportService.deleteExports(documentId);
                             }
                         }
                 );

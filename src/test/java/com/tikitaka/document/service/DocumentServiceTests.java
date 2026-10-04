@@ -80,6 +80,7 @@ class DocumentServiceTests {
 
     private final DocumentAiProcessingService documentAiProcessingService =
             mock(DocumentAiProcessingService.class);
+    private final DocumentNoteExportService noteExportService = mock(DocumentNoteExportService.class);
 
     private final DocumentService service =
             new DocumentService(
@@ -93,7 +94,8 @@ class DocumentServiceTests {
                     pdfProcessor,
                     storage,
                     notificationService,
-                    documentAiProcessingService
+                    documentAiProcessingService,
+                    noteExportService
             );
 
     @AfterEach
@@ -506,6 +508,24 @@ class DocumentServiceTests {
     }
 
     @Test
+    void noteDownloadRequiresApprovedMembershipBeforeExporting() {
+        UUID documentId = UUID.randomUUID();
+        User user = user();
+        Document document = mock(Document.class);
+        Space space = mock(Space.class);
+        UUID spaceId = UUID.randomUUID();
+        when(document.getSpace()).thenReturn(space);
+        when(space.getId()).thenReturn(spaceId);
+        when(documentRepository.findById(documentId)).thenReturn(Optional.of(document));
+        when(memberRepository.findBySpaceIdAndUserIdAndStatusAndRemovedAtIsNull(
+                spaceId, user.getId(), SpaceMemberStatus.APPROVED)).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> service.downloadDocument(documentId,
+                com.tikitaka.document.dto.DocumentNoteType.ALL, user))
+                .isInstanceOf(BusinessException.class);
+        org.mockito.Mockito.verifyNoInteractions(noteExportService, storage);
+    }
+
+    @Test
     void deletesSlidesBeforeDocumentAndCleansUpFilesOnlyAfterCommit() {
 
         UUID spaceId =
@@ -601,6 +621,8 @@ class DocumentServiceTests {
                 TransactionSynchronizationManager
                         .getSynchronizations();
 
+        verify(noteExportService, never()).deleteExports(documentId);
+
         assertThat(
                 synchronizations
         ).hasSize(1);
@@ -608,6 +630,8 @@ class DocumentServiceTests {
         synchronizations
                 .get(0)
                 .afterCommit();
+
+        verify(noteExportService).deleteExports(documentId);
 
         verify(storage)
                 .delete(
