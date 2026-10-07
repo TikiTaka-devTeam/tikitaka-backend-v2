@@ -1521,7 +1521,8 @@ public class AssignmentService {
                                 .comparing(
                                         (SpaceMember member) ->
                                                 member.getUser()
-                                                        .getMemberIdNumber()
+                                                        .getMemberIdNumber(),
+                                        Comparator.nullsLast(Comparator.naturalOrder())
                                 )
                                 .thenComparing(member ->
                                         member.getUser()
