@@ -23,12 +23,10 @@ import com.tikitaka.notification.exception.NotificationErrorCode;
 import com.tikitaka.notification.repository.NotificationRepository;
 import com.tikitaka.push.dto.response.WebPushPayload;
 import com.tikitaka.push.service.WebPushService;
-import com.tikitaka.space.entity.PermissionType;
 import com.tikitaka.space.entity.Space;
 import com.tikitaka.space.entity.SpaceMember;
 import com.tikitaka.space.entity.SpaceMemberRole;
 import com.tikitaka.space.entity.SpaceMemberStatus;
-import com.tikitaka.space.repository.SpaceMemberPermissionRepository;
 import com.tikitaka.space.repository.SpaceMemberRepository;
 import com.tikitaka.user.entity.User;
 
@@ -45,7 +43,6 @@ public class NotificationService {
 
     private final NotificationRepository notificationRepository;
     private final SpaceMemberRepository spaceMemberRepository;
-    private final SpaceMemberPermissionRepository permissionRepository;
     private final CursorCodec cursorCodec;
     private final WebPushService webPushService;
 
@@ -158,7 +155,7 @@ public class NotificationService {
         return new NotificationReadAllResponse(updatedCount);
     }
 
-    // NOTICE_CREATED: 학생 + APPROVED 조교
+    // NOTICE_CREATED: 승인된 학생
     @Transactional
     public void createNoticeCreatedNotification(
             Space space,
@@ -175,7 +172,7 @@ public class NotificationService {
         );
     }
 
-    // DOCUMENT_UPLOADED: 학생 + APPROVED 조교
+    // DOCUMENT_UPLOADED: 승인된 학생
     @Transactional
     public void createDocumentUploadedNotification(
             Space space,
@@ -192,7 +189,7 @@ public class NotificationService {
         );
     }
 
-    // ASSIGNMENT_CLOSED: 교수 + ASSIGNMENT_MANAGE 권한 조교
+    // ASSIGNMENT_CLOSED: 교수 + 승인된 조교
     @Transactional
     public void createAssignmentClosedNotification(
             Space space,
@@ -204,14 +201,13 @@ public class NotificationService {
         createManagerNotifications(
                 space,
                 NotificationType.ASSIGNMENT_CLOSED,
-                PermissionType.ASSIGNMENT_MANAGE,
                 message,
                 assignmentId,
                 DuplicatePolicy.SKIP_EXISTING
         );
     }
 
-    // SPACE_JOIN_REQUESTED: 교수 + MEMBER_MANAGE 권한 조교
+    // SPACE_JOIN_REQUESTED: 교수 + 승인된 조교
     @Transactional
     public void createSpaceJoinRequestedNotification(
             Space space,
@@ -223,14 +219,13 @@ public class NotificationService {
         createManagerNotifications(
                 space,
                 NotificationType.SPACE_JOIN_REQUESTED,
-                PermissionType.MEMBER_MANAGE,
                 message,
                 spaceMemberId,
                 DuplicatePolicy.CREATE_ALWAYS
         );
     }
 
-    // QUESTION_CREATED: 교수 + QUESTION_MANAGE 권한 조교
+    // QUESTION_CREATED: 교수 + 승인된 조교
     @Transactional
     public void createQuestionCreatedNotification(
             Space space,
@@ -242,7 +237,6 @@ public class NotificationService {
         createManagerNotifications(
                 space,
                 NotificationType.QUESTION_CREATED,
-                PermissionType.QUESTION_MANAGE,
                 message,
                 questionId,
                 DuplicatePolicy.SKIP_EXISTING
@@ -256,6 +250,18 @@ public class NotificationService {
             Space space,
             UUID questionId
     ) {
+        boolean currentStudent = spaceMemberRepository
+                .findBySpaceIdAndUserIdAndStatusAndRemovedAtIsNull(
+                        space.getId(),
+                        student.getId(),
+                        SpaceMemberStatus.APPROVED
+                )
+                .filter(member -> member.getRole() == SpaceMemberRole.STUDENT)
+                .isPresent();
+        if (!currentStudent) {
+            return;
+        }
+
         String message = space.getSpaceName()
                 + "에 등록한 내 질문에 답변이 등록되었습니다.";
 
@@ -281,8 +287,7 @@ public class NotificationService {
                 );
 
         for (SpaceMember member : members) {
-            if (member.getRole() != SpaceMemberRole.STUDENT
-                    && member.getRole() != SpaceMemberRole.ASSISTANT) {
+            if (member.getRole() != SpaceMemberRole.STUDENT) {
                 continue;
             }
 
@@ -299,7 +304,6 @@ public class NotificationService {
     private void createManagerNotifications(
             Space space,
             NotificationType type,
-            PermissionType assistantPermission,
             String message,
             UUID targetId,
             DuplicatePolicy duplicatePolicy
@@ -311,16 +315,8 @@ public class NotificationService {
                 );
 
         for (SpaceMember member : members) {
-            boolean professor = member.getRole() == SpaceMemberRole.PROFESSOR;
-            boolean permittedAssistant =
-                    member.getRole() == SpaceMemberRole.ASSISTANT
-                            && permissionRepository
-                                    .existsBySpaceMemberIdAndPermission(
-                                            member.getId(),
-                                            assistantPermission
-                                    );
-
-            if (!professor && !permittedAssistant) {
+            if (member.getRole() != SpaceMemberRole.PROFESSOR
+                    && member.getRole() != SpaceMemberRole.ASSISTANT) {
                 continue;
             }
 
