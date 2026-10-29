@@ -1,0 +1,19 @@
+# Enable alongside prod: SPRING_PROFILES_ACTIVE=prod,monitoring
+# Fixed loopback listener: scrape only through an SSH tunnel.
+management:
+  server:
+    address: 127.0.0.1
+    port: 9101
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+        tikitaka.websocket.relay: true
+
+app:
+  monitoring:
+    enabled: true

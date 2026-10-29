@@ -28,6 +28,10 @@ public class WebSocketSessionRegistry {
         this.scheduler = scheduler;
     }
 
+    public int size() {
+        return sessions.size();
+    }
+
     public void register(WebSocketSession session) {
         SessionState replaced = sessions.put(session.getId(), new SessionState(session));
         if (replaced != null) {
