@@ -85,7 +85,7 @@ jobs:
             echo "Waiting for application..."
 
             for i in {1..12}; do
-              if curl --fail --silent http://localhost:8080/actuator/health; then
+              if curl --fail --silent http://localhost:8080/actuator/health || curl --fail --silent http://127.0.0.1:9101/actuator/health; then
                 echo
                 echo "Application is healthy."
 

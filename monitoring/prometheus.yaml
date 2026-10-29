@@ -1,0 +1,11 @@
+global:
+  scrape_interval: 5s
+  scrape_timeout: 4s
+scrape_configs:
+  - job_name: tikitaka-node
+    static_configs:
+      - targets: [tunnel:19100]
+  - job_name: tikitaka-backend
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: [tunnel:19101]

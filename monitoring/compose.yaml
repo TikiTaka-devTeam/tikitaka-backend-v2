@@ -1,0 +1,42 @@
+name: tikitaka-monitoring
+services:
+  tunnel:
+    build: ./tunnel
+    environment:
+      SSH_HOST: ${SSH_HOST:?Set SSH_HOST in monitoring/.env}
+      SSH_USER: ${SSH_USER:-ubuntu}
+    volumes:
+      - ${SSH_KEY_PATH:?Set SSH_KEY_PATH}:/run/ssh-key:ro
+      - ${SSH_KNOWN_HOSTS_PATH:?Set SSH_KNOWN_HOSTS_PATH}:/run/known-hosts:ro
+    restart: unless-stopped
+    mem_limit: 64m
+  prometheus:
+    image: prom/prometheus:v3.13.5
+    command:
+      - --config.file=/etc/prometheus/prometheus.yaml
+      - --storage.tsdb.retention.time=7d
+      - --storage.tsdb.retention.size=2GB
+    volumes:
+      - ./prometheus.yaml:/etc/prometheus/prometheus.yaml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - 127.0.0.1:9090:9090
+    restart: unless-stopped
+    mem_limit: 512m
+  grafana:
+    image: grafana/grafana:12.4.0
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Set GRAFANA_ADMIN_PASSWORD}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - 127.0.0.1:3001:3000
+    restart: unless-stopped
+    mem_limit: 256m
+volumes:
+  prometheus-data:
+  grafana-data:
