@@ -1,0 +1,7 @@
+apiVersion: 1
+providers:
+  - name: SYNC-01
+    folder: Tikitaka
+    type: file
+    options:
+      path: /var/lib/grafana/dashboards
